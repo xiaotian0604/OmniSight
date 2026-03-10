@@ -1,0 +1,36 @@
+{
+  /* ---------------------------------------------------------------
+   * @omnisight/shared-types — TypeScript 编译配置
+   *
+   * 本包仅包含类型定义，不涉及 DOM 或 React，
+   * 因此 target 设为 ES2020，lib 仅包含 ESNext。
+   * strict 模式全开，确保类型安全。
+   * 实际构建由 tsup 完成，此文件主要供 IDE 和类型检查使用。
+   * --------------------------------------------------------------- */
+  "compilerOptions": {
+    /* ---------- 编译目标 ---------- */
+    "target": "ES2020",                    /* 编译产物的 ECMAScript 版本，ES2020 支持可选链、空值合并等语法 */
+    "module": "ESNext",                    /* 模块系统：ESNext 以支持 tree-shaking */
+    "moduleResolution": "bundler",         /* 模块解析策略：bundler 模式兼容 tsup/esbuild 等打包工具 */
+    "lib": ["ESNext"],                     /* 可用的类型库：仅需 ESNext，不需要 DOM（本包是纯类型定义） */
+
+    /* ---------- 严格模式 ---------- */
+    "strict": true,                        /* 启用所有严格类型检查选项 */
+    "esModuleInterop": true,               /* 允许 CommonJS 模块的默认导入兼容 */
+    "forceConsistentCasingInFileNames": true, /* 强制文件名大小写一致，避免跨平台问题 */
+    "skipLibCheck": true,                  /* 跳过 node_modules 中 .d.ts 文件的类型检查，加速编译 */
+
+    /* ---------- 输出配置 ---------- */
+    "declaration": true,                   /* 生成 .d.ts 类型声明文件 */
+    "declarationMap": true,                /* 生成 .d.ts.map 文件，支持 IDE 跳转到源码 */
+    "sourceMap": true,                     /* 生成 .js.map 文件，便于调试 */
+    "outDir": "./dist",                    /* 编译输出目录 */
+    "rootDir": "./src",                    /* 源码根目录 */
+
+    /* ---------- 路径与解析 ---------- */
+    "resolveJsonModule": true,             /* 允许导入 .json 文件 */
+    "isolatedModules": true                /* 确保每个文件可独立编译，兼容 esbuild/swc 等工具 */
+  },
+  "include": ["src/**/*.ts"],              /* 包含 src 目录下所有 .ts 文件 */
+  "exclude": ["node_modules", "dist"]      /* 排除依赖和构建产物目录 */
+}

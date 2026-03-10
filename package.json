@@ -1,0 +1,19 @@
+{
+  "name": "omnisight",
+  "private": true,
+  "description": "OmniSight 全链路前端可观测性系统 — Monorepo 根配置",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18"
+  }
+}

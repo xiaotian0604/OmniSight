@@ -1,0 +1,35 @@
+{
+  "name": "@omnisight/console",
+  "version": "0.0.1",
+  "private": true,
+  "description": "OmniSight 可视化控制台 — React 18 + ECharts + rrweb-player，面试演示核心模块",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "echo 'no lint configured'",
+    "test": "echo 'no tests'",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^6.23.0",
+    "@tanstack/react-query": "^5.50.0",
+    "axios": "^1.7.0",
+    "echarts": "^5.5.0",
+    "echarts-for-react": "^3.0.2",
+    "rrweb-player": "^2.0.0-alpha.13",
+    "zustand": "^4.5.0",
+    "@omnisight/shared-types": "workspace:*",
+    "@omnisight/ui-components": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0"
+  }
+}

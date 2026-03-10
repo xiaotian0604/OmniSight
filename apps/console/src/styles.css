@@ -1,0 +1,944 @@
+/**
+ * @file 全局样式表
+ * @description OmniSight 控制台的全局 CSS 样式
+ *
+ * 设计原则：
+ * 1. 深色主题 — 监控类产品的标准配色，减少长时间使用的视觉疲劳
+ * 2. CSS 变量 — 统一管理颜色、间距、圆角等设计 Token，便于主题切换
+ * 3. 响应式 — 侧栏固定宽度 + 主内容区自适应
+ *
+ * 颜色体系：
+ * - 背景色：从深到浅 #0f1117 → #161b22 → #1c2333 → #21283b
+ * - 文字色：主文字 #e6edf3，次要文字 #8b949e，禁用文字 #484f58
+ * - 强调色：蓝色 #58a6ff（链接/选中态），绿色 #3fb950（成功），
+ *           黄色 #d29922（警告），红色 #f85149（错误）
+ */
+
+/* ================================================================
+   CSS 自定义属性（设计 Token）
+   集中管理所有颜色、间距、动画等变量
+   修改这里可以全局调整主题风格
+   ================================================================ */
+:root {
+  /* ---------- 背景色层级 ---------- */
+  --bg-primary: #0f1117;        /* 最深层背景：页面底色 */
+  --bg-secondary: #161b22;      /* 次层背景：侧栏、卡片 */
+  --bg-tertiary: #1c2333;       /* 三层背景：输入框、表格行 */
+  --bg-elevated: #21283b;       /* 悬浮层背景：下拉菜单、弹窗 */
+
+  /* ---------- 文字色层级 ---------- */
+  --text-primary: #e6edf3;      /* 主文字：标题、正文 */
+  --text-secondary: #8b949e;    /* 次要文字：描述、时间戳 */
+  --text-muted: #484f58;        /* 禁用/占位文字 */
+
+  /* ---------- 强调色 ---------- */
+  --accent-blue: #58a6ff;       /* 链接、选中态、主按钮 */
+  --accent-green: #3fb950;      /* 成功状态、健康指标 */
+  --accent-yellow: #d29922;     /* 警告状态、需改进指标 */
+  --accent-red: #f85149;        /* 错误状态、危险操作 */
+  --accent-purple: #bc8cff;     /* 辅助强调色 */
+
+  /* ---------- 边框色 ---------- */
+  --border-default: #30363d;    /* 默认边框 */
+  --border-muted: #21262d;      /* 弱边框：分隔线 */
+
+  /* ---------- 布局尺寸 ---------- */
+  --sidebar-width: 220px;       /* 侧栏宽度 */
+  --header-height: 56px;        /* 顶部 Header 高度 */
+
+  /* ---------- 圆角 ---------- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* ---------- 阴影 ---------- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* ---------- 过渡动画 ---------- */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+}
+
+/* ================================================================
+   全局重置与基础样式
+   ================================================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+a {
+  color: var(--accent-blue);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: #79c0ff;
+}
+
+/* ================================================================
+   应用布局 — CSS Grid 两栏布局
+   左侧固定宽度侧栏 + 右侧自适应主内容区
+   ================================================================ */
+.app-layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ================================================================
+   侧栏导航样式
+   固定在左侧，包含 Logo、导航菜单和底部版本信息
+   ================================================================ */
+.sidebar {
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* Logo 区域 */
+.sidebar-logo {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.logo-link:hover {
+  color: var(--text-primary);
+}
+
+.logo-icon {
+  font-size: 24px;
+}
+
+/* 导航菜单 */
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/**
+ * 导航项样式
+ * 使用 flexbox 实现图标 + 文字的水平排列
+ * hover 和 active 状态有不同的背景色和文字色
+ */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* 当前路由对应的导航项高亮样式 */
+.nav-item.active {
+  background-color: rgba(88, 166, 255, 0.1);
+  color: var(--accent-blue);
+}
+
+.nav-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+
+/* 侧栏底部版本信息 */
+.sidebar-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.version-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ================================================================
+   主内容区样式
+   包含顶部 Header 和页面内容区
+   ================================================================ */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 顶部 Header */
+.top-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--header-height);
+  padding: 0 24px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 页面内容区（可滚动） */
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* ================================================================
+   页面加载状态
+   懒加载页面模块时显示的加载指示器
+   ================================================================ */
+.page-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--text-secondary);
+  gap: 12px;
+}
+
+.page-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-default);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ================================================================
+   卡片组件样式
+   用于仪表盘中的各种数据展示卡片
+   ================================================================ */
+.card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  transition: border-color var(--transition-fast);
+}
+
+.card:hover {
+  border-color: var(--border-default);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ================================================================
+   表格样式
+   用于错误列表、接口耗时排行等数据表格
+   ================================================================ */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+thead th {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+/* 表格行 hover 效果 */
+tbody tr {
+  transition: background-color var(--transition-fast);
+}
+
+tbody tr:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* 可点击的表格行（如错误列表） */
+tbody tr.clickable {
+  cursor: pointer;
+}
+
+tbody tr.clickable:hover {
+  background-color: rgba(88, 166, 255, 0.05);
+}
+
+/* ================================================================
+   徽章（Badge）样式
+   用于状态标识：good（绿色）、needs-improvement（黄色）、poor（红色）
+   ================================================================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* 成功/健康状态 — 绿色 */
+.badge-good,
+.badge-success {
+  background-color: rgba(63, 185, 80, 0.15);
+  color: var(--accent-green);
+}
+
+/* 需改进状态 — 黄色 */
+.badge-needs-improvement,
+.badge-warning {
+  background-color: rgba(210, 153, 34, 0.15);
+  color: var(--accent-yellow);
+}
+
+/* 差/错误状态 — 红色 */
+.badge-poor,
+.badge-error {
+  background-color: rgba(248, 81, 73, 0.15);
+  color: var(--accent-red);
+}
+
+/* 信息状态 — 蓝色 */
+.badge-info {
+  background-color: rgba(88, 166, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+/* ================================================================
+   按钮样式
+   ================================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background-color: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
+
+/* 主按钮 — 蓝色强调 */
+.btn-primary {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background-color: #79c0ff;
+  border-color: #79c0ff;
+}
+
+/* 危险按钮 — 红色 */
+.btn-danger {
+  background-color: transparent;
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.btn-danger:hover {
+  background-color: rgba(248, 81, 73, 0.15);
+}
+
+/* 小尺寸按钮 */
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* ================================================================
+   表单元素样式
+   ================================================================ */
+input,
+select,
+textarea {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* ================================================================
+   页面标题区域
+   每个页面顶部的标题 + 描述 + 操作按钮区域
+   ================================================================ */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.page-header-info h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.page-header-info p {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ================================================================
+   网格布局工具类
+   用于仪表盘页面的多卡片排列
+   ================================================================ */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+/* ================================================================
+   堆栈展示样式
+   用于错误详情页的代码堆栈高亮显示
+   ================================================================ */
+.stack-trace {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--text-secondary);
+}
+
+/* 堆栈帧中的文件路径高亮 */
+.stack-frame-file {
+  color: var(--accent-blue);
+}
+
+/* 堆栈帧中的行号高亮 */
+.stack-frame-line {
+  color: var(--accent-yellow);
+}
+
+/* 堆栈帧中的函数名 */
+.stack-frame-func {
+  color: var(--accent-purple);
+}
+
+/* ================================================================
+   代码块样式
+   用于 SDK 接入指引中的代码展示
+   ================================================================ */
+.code-block {
+  background-color: #0d1117;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  color: var(--text-primary);
+  position: relative;
+}
+
+/* 代码块右上角的复制按钮 */
+.code-block-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.code-block-copy:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
+}
+
+/* ================================================================
+   面包屑导航样式
+   用于错误详情页展示错误发生前的用户操作轨迹
+   ================================================================ */
+.breadcrumb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-left: 2px solid var(--border-default);
+  padding-left: 16px;
+  position: relative;
+}
+
+/* 面包屑时间轴上的圆点 */
+.breadcrumb-item::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--border-default);
+}
+
+/* 错误类型的面包屑圆点为红色 */
+.breadcrumb-item.error::before {
+  background-color: var(--accent-red);
+}
+
+/* 点击类型的面包屑圆点为蓝色 */
+.breadcrumb-item.click::before {
+  background-color: var(--accent-blue);
+}
+
+/* 导航类型的面包屑圆点为紫色 */
+.breadcrumb-item.navigation::before {
+  background-color: var(--accent-purple);
+}
+
+.breadcrumb-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 80px;
+  font-family: 'SF Mono', monospace;
+}
+
+.breadcrumb-content {
+  flex: 1;
+}
+
+.breadcrumb-type {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.breadcrumb-message {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   时间范围选择器样式
+   ================================================================ */
+.time-range-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.time-range-option {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: none;
+  background: none;
+}
+
+.time-range-option:hover {
+  color: var(--text-primary);
+}
+
+.time-range-option.active {
+  background-color: var(--accent-blue);
+  color: #ffffff;
+}
+
+/* ================================================================
+   空状态组件样式
+   当列表/图表无数据时显示的占位界面
+   ================================================================ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.empty-state-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 400px;
+}
+
+/* ================================================================
+   回放播放器相关样式
+   ================================================================ */
+.replay-page {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  height: calc(100vh - var(--header-height) - 48px);
+}
+
+.replay-player-container {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 事件时间轴 */
+.event-timeline {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.event-timeline-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  font-size: 12px;
+}
+
+.timeline-item:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.timeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.timeline-dot.error {
+  background-color: var(--accent-red);
+}
+
+.timeline-dot.click {
+  background-color: var(--accent-blue);
+}
+
+.timeline-dot.navigation {
+  background-color: var(--accent-purple);
+}
+
+.timeline-time {
+  color: var(--text-muted);
+  font-family: 'SF Mono', monospace;
+  font-size: 11px;
+  min-width: 50px;
+}
+
+.timeline-label {
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ================================================================
+   评分卡样式
+   用于 Vitals 评分展示（LCP/CLS/TTFB/INP）
+   ================================================================ */
+.score-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  text-align: center;
+}
+
+.score-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.score-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.score-card-value.good {
+  color: var(--accent-green);
+}
+
+.score-card-value.needs-improvement {
+  color: var(--accent-yellow);
+}
+
+.score-card-value.poor {
+  color: var(--accent-red);
+}
+
+/* ================================================================
+   告警通知样式
+   WebSocket 推送的实时告警在页面右上角弹出
+   ================================================================ */
+.alert-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 400px;
+}
+
+.alert-item {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--accent-red);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  box-shadow: var(--shadow-lg);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.alert-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-red);
+  margin-bottom: 4px;
+}
+
+.alert-message {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ================================================================
+   工具类
+   ================================================================ */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-muted { color: var(--text-secondary); }
+.text-error { color: var(--accent-red); }
+.text-success { color: var(--accent-green); }
+.text-warning { color: var(--accent-yellow); }
+.font-mono { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-4 { margin-top: 16px; }
+.mt-6 { margin-top: 24px; }
+.mb-4 { margin-bottom: 16px; }
+.mb-6 { margin-bottom: 24px; }
+.gap-4 { gap: 16px; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+
+/* ================================================================
+   滚动条样式（Webkit 浏览器）
+   深色主题下的自定义滚动条，与整体风格一致
+   ================================================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}

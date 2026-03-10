@@ -1,0 +1,38 @@
+{
+  "name": "@omnisight/ui-components",
+  "version": "0.0.1",
+  "description": "OmniSight 控制台公共 UI 组件库（StatusBadge、MetricChart 等）",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.tsx --format cjs,esm --dts --external react --external react-dom",
+    "dev": "tsup src/index.tsx --format cjs,esm --dts --external react --external react-dom --watch",
+    "lint": "echo 'no lint configured'",
+    "test": "echo 'no tests'",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "echarts": "^5.5.0",
+    "echarts-for-react": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}

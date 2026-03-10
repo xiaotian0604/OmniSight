@@ -1,0 +1,40 @@
+{
+  /* ---------------------------------------------------------------
+   * @omnisight/console — TypeScript 编译配置
+   *
+   * 本配置用于 React 18 前端项目，启用 JSX 自动转换（react-jsx），
+   * 配置路径别名 @/* 映射到 src/* 目录，简化深层导入路径。
+   * strict 模式全开确保类型安全，skipLibCheck 加速编译。
+   * 实际构建由 Vite (esbuild) 完成，此文件主要供 IDE 和 tsc 类型检查使用。
+   * --------------------------------------------------------------- */
+  "compilerOptions": {
+    /* ---------- 编译目标 ---------- */
+    "target": "ES2020",                    /* 编译产物的 ECMAScript 版本 */
+    "module": "ESNext",                    /* 模块系统：ESNext 支持 tree-shaking */
+    "moduleResolution": "bundler",         /* 模块解析策略：bundler 模式兼容 Vite */
+    "lib": ["ES2020", "DOM", "DOM.Iterable"], /* 类型库：需要 DOM 用于 React 组件 */
+
+    /* ---------- JSX 配置 ---------- */
+    "jsx": "react-jsx",                    /* React 17+ 新 JSX 转换，无需手动 import React */
+
+    /* ---------- 严格模式 ---------- */
+    "strict": true,                        /* 启用所有严格类型检查 */
+    "esModuleInterop": true,               /* CommonJS 模块默认导入兼容 */
+    "forceConsistentCasingInFileNames": true, /* 强制文件名大小写一致 */
+    "skipLibCheck": true,                  /* 跳过 node_modules 类型检查，加速编译 */
+    "isolatedModules": true,               /* 确保每个文件可独立编译，兼容 esbuild */
+    "noEmit": true,                        /* 不输出编译产物，由 Vite 负责构建 */
+
+    /* ---------- 路径别名 ---------- */
+    "baseUrl": ".",                         /* 路径解析基准目录 */
+    "paths": {
+      "@/*": ["src/*"]                     /* @ 别名：import xxx from '@/components/xxx' */
+    },
+
+    /* ---------- 其他 ---------- */
+    "resolveJsonModule": true,             /* 允许导入 .json 文件 */
+    "allowImportingTsExtensions": true     /* 允许 .ts/.tsx 扩展名导入（Vite 支持） */
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite-env.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}

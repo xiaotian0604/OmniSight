@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 响应式视口配置，确保在不同设备上正确显示 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 页面标题：显示在浏览器标签页上 -->
+    <title>OmniSight — 全链路可观测性控制台</title>
+    <!-- 页面描述：用于 SEO 和社交分享 -->
+    <meta name="description" content="OmniSight 前端可观测性平台控制台，提供错误监控、性能分析、用户行为回放等功能" />
+  </head>
+  <body>
+    <!--
+      React 应用挂载点
+      React 18 的 createRoot 会将整个应用渲染到这个 DOM 节点中
+      id="root" 是 React 项目的约定命名
+    -->
+    <div id="root"></div>
+    <!--
+      Vite 入口脚本
+      type="module" 表示使用 ES Module 加载方式
+      Vite 开发服务器会拦截此请求，提供 HMR（热模块替换）支持
+      生产构建时，Vite 会自动替换为打包后的文件路径
+    -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

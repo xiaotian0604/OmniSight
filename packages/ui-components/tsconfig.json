@@ -1,0 +1,39 @@
+{
+  /* ---------------------------------------------------------------
+   * @omnisight/ui-components — TypeScript 编译配置
+   *
+   * 本包包含 React 组件，因此需要配置 JSX 支持。
+   * 使用 react-jsx 转换模式（React 17+ 新 JSX Transform），
+   * 无需在每个文件顶部 import React。
+   * 实际构建由 tsup 完成，此文件主要供 IDE 和类型检查使用。
+   * --------------------------------------------------------------- */
+  "compilerOptions": {
+    /* ---------- 编译目标 ---------- */
+    "target": "ES2020",                    /* 编译产物的 ECMAScript 版本 */
+    "module": "ESNext",                    /* 模块系统：ESNext 以支持 tree-shaking */
+    "moduleResolution": "bundler",         /* 模块解析策略：bundler 模式兼容 tsup/esbuild */
+    "lib": ["ESNext", "DOM", "DOM.Iterable"], /* 类型库：需要 DOM 以支持 React 组件中的 HTML 元素类型 */
+
+    /* ---------- JSX 配置 ---------- */
+    "jsx": "react-jsx",                    /* 使用 React 17+ 的新 JSX 转换，无需手动 import React */
+
+    /* ---------- 严格模式 ---------- */
+    "strict": true,                        /* 启用所有严格类型检查选项 */
+    "esModuleInterop": true,               /* 允许 CommonJS 模块的默认导入兼容 */
+    "forceConsistentCasingInFileNames": true, /* 强制文件名大小写一致 */
+    "skipLibCheck": true,                  /* 跳过 node_modules 中 .d.ts 的类型检查 */
+
+    /* ---------- 输出配置 ---------- */
+    "declaration": true,                   /* 生成 .d.ts 类型声明文件 */
+    "declarationMap": true,                /* 生成 .d.ts.map，支持 IDE 跳转到源码 */
+    "sourceMap": true,                     /* 生成 source map，便于调试 */
+    "outDir": "./dist",                    /* 编译输出目录 */
+    "rootDir": "./src",                    /* 源码根目录 */
+
+    /* ---------- 路径与解析 ---------- */
+    "resolveJsonModule": true,             /* 允许导入 .json 文件 */
+    "isolatedModules": true                /* 确保每个文件可独立编译 */
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"], /* 包含 src 下所有 .ts 和 .tsx 文件 */
+  "exclude": ["node_modules", "dist"]         /* 排除依赖和构建产物 */
+}
