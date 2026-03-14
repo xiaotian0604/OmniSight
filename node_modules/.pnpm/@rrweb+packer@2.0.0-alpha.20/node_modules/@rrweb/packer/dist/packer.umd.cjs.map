@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["packer.cjs"],
+  "sourcesContent": ["\"use strict\";\nObject.defineProperty(exports, Symbol.toStringTag, { value: \"Module\" });\nconst pack = require(\"./pack.cjs\");\nconst unpack = require(\"./unpack.cjs\");\nexports.pack = pack.pack;\nexports.unpack = unpack.unpack;\n//# sourceMappingURL=packer.cjs.map\n"],
+  "mappings": ";;;;;;;;;;;;;;AACA,OAAO,eAAe,SAAS,OAAO,aAAa,EAAE,OAAO,SAAS,CAAC;AACtE,MAAM,OAAO,QAAQ,YAAY;AACjC,MAAM,SAAS,QAAQ,cAAc;AACrC,QAAQ,OAAO,KAAK;AACpB,QAAQ,SAAS,OAAO;",
+  "names": []
+}

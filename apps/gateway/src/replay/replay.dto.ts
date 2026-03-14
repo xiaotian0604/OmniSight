@@ -33,7 +33,7 @@ export class UploadReplayDto {
   @ApiProperty({ description: '用户会话 ID', example: 'sess_a1b2c3d4' })
   @IsString()
   @IsNotEmpty()
-  sessionId: string;
+  sessionId!: string;
 
   /**
    * 项目标识
@@ -42,7 +42,7 @@ export class UploadReplayDto {
   @ApiProperty({ description: '项目标识', example: 'my-web-app' })
   @IsString()
   @IsNotEmpty()
-  appId: string;
+  appId!: string;
 
   /**
    * rrweb 事件数组
@@ -53,7 +53,7 @@ export class UploadReplayDto {
     type: [Object],
   })
   @IsArray()
-  events: any[];
+  events!: any[];
 
   /**
    * 本次录像关联的错误数量（可选，默认 1）

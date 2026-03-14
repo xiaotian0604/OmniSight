@@ -1,4 +1,4 @@
-/**
+ /**
  * @file transport/beacon.ts
  * @description Beacon API 封装 — 使用 navigator.sendBeacon 发送数据
  *

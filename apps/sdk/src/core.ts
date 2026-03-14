@@ -323,7 +323,7 @@ export class Core {
     }
 
     /* 触发该事件类型的所有回调函数 */
-    this.emit(event.type, enrichedEvent);
+    this.emit(event.type, <EventData>enrichedEvent);
 
     /* 将事件加入批量上报队列 */
     this.transport.add(enrichedEvent);

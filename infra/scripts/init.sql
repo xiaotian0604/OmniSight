@@ -74,14 +74,24 @@ CREATE TABLE IF NOT EXISTS replay_sessions (
 -- ---------------------------------------------------------------
 -- 4. SourceMap 索引表
 -- CI 构建时上传 .map 文件，查看错误时服务端还原压缩后的堆栈
+--
+-- Git 关联字段（新增）：
+-- - git_commit: Git 提交 hash，用于关联代码变更
+-- - git_author: Git 提交作者，用于告警时 @ 相关开发者
+-- - git_message: Git 提交信息，方便定位问题
+-- - git_branch: Git 分支名，用于区分不同环境
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sourcemaps (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  app_id     VARCHAR(64) NOT NULL,
-  version    VARCHAR(64) NOT NULL,             -- 应用版本号（如 git sha）
-  filename   VARCHAR(256) NOT NULL,            -- 原始 JS 文件名
-  map_path   TEXT NOT NULL,                    -- .map 文件存储路径
-  created_at TIMESTAMPTZ DEFAULT NOW(),
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  app_id      VARCHAR(64) NOT NULL,
+  version     VARCHAR(64) NOT NULL,             -- 应用版本号（如 git sha）
+  filename    VARCHAR(256) NOT NULL,            -- 原始 JS 文件名
+  map_path    TEXT NOT NULL,                    -- .map 文件存储路径
+  git_commit  VARCHAR(64),                      -- Git 提交 hash
+  git_author  VARCHAR(128),                     -- Git 提交作者
+  git_message TEXT,                             -- Git 提交信息
+  git_branch  VARCHAR(128),                     -- Git 分支名
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (app_id, version, filename)           -- 同一版本同一文件只有一份 map
 );
 

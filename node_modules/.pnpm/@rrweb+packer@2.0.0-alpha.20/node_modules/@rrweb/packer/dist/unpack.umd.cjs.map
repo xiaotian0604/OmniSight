@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/unpack.ts"],
+  "sourcesContent": ["import { strFromU8, strToU8, unzlibSync } from 'fflate';\nimport { type eventWithTimeAndPacker, MARK } from './base';\nimport type { UnpackFn, eventWithTime } from '@rrweb/types';\n\nexport const unpack: UnpackFn = (raw: string) => {\n  if (typeof raw !== 'string') {\n    return raw;\n  }\n  try {\n    const e: eventWithTime = JSON.parse(raw) as eventWithTime;\n    if (e.timestamp) {\n      return e;\n    }\n  } catch (error) {\n    // ignore and continue\n  }\n  try {\n    const e: eventWithTimeAndPacker = JSON.parse(\n      strFromU8(unzlibSync(strToU8(raw, true))),\n    ) as eventWithTimeAndPacker;\n    if (e.v === MARK) {\n      return e;\n    }\n    throw new Error(\n      `These events were packed with packer ${e.v} which is incompatible with current packer ${MARK}.`,\n    );\n  } catch (error) {\n    console.error(error);\n    throw new Error('Unknown data format.');\n  }\n};\n"],
+  "mappings": ";;;;;;;;;;;;;;;;AAIa,MAAA,SAAmB,CAAC,QAAgB;AAC3C,MAAA,OAAO,QAAQ,UAAU;AACpB,WAAA;EACT;AACI,MAAA;AACI,UAAA,IAAmB,KAAK,MAAM,GAAG;AACvC,QAAI,EAAE,WAAW;AACR,aAAA;IACT;EAAA,SACO,OAAO;EAEhB;AACI,MAAA;AACF,UAAM,IAA4B,KAAK;MACrCA,KAAAA,UAAUC,KAAAA,WAAWC,KAAAA,QAAQ,KAAK,IAAI,CAAC,CAAC;IAAA;AAEtC,QAAA,EAAE,MAAMC,KAAAA,MAAM;AACT,aAAA;IACT;AACA,UAAM,IAAI;MACR,wCAAwC,EAAE,CAAC,8CAA8CA,KAAAA,IAAI;IAAA;EAAA,SAExF,OAAO;AACd,YAAQ,MAAM,KAAK;AACb,UAAA,IAAI,MAAM,sBAAsB;EACxC;AACF;;",
+  "names": ["strFromU8", "unzlibSync", "strToU8", "MARK"]
+}

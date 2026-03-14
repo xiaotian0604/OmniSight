@@ -7,13 +7,17 @@
  * 提供 console 前端所需的各种数据查询能力，包括：
  * - 错误率时序趋势（概览仪表盘的折线图）
  * - 错误聚合列表（按指纹分组，显示频次和影响用户数）
- * - 错误详情（单个错误的完整信息）
+ * - 错误详情（单个错误的完整信息，包含 Git 关联信息）
  * - API 接口耗时指标（P50/P99）
  * - Web Vitals 性能指标时序数据
  *
  * 数据来源：
  * 所有数据都存储在 PostgreSQL 的 events 超表中（TimescaleDB）
  * 不同类型的事件通过 type 字段区分：error / api / vital / resource / behavior
+ *
+ * Git 关联功能：
+ * 错误详情查询时，根据错误文件名从 sourcemaps 表获取 Git 信息，
+ * 方便定位问题代码的提交记录和作者。
  *
  * TimescaleDB 特性使用：
  * - time_bucket() 函数：按时间桶聚合数据（如每 5 分钟一个点）
@@ -205,7 +209,7 @@ export class QueryService {
   }
 
   /**
-   * 获取单个错误的详细信息
+   * 获取单个错误的详细信息（包含 Git 关联信息）
    *
    * 业务场景：
    * console 的错误详情页。展示错误的完整信息，包括：
@@ -213,10 +217,16 @@ export class QueryService {
    * - 发生时的页面 URL 和 User-Agent
    * - 完整的 payload（包含 filename, lineno, colno 等）
    * - 会话 ID（可跳转到关联的录像回放）
+   * - Git 提交信息（commit、author、message、branch）
+   *
+   * Git 关联逻辑：
+   * 1. 从错误事件的 payload 中提取 filename
+   * 2. 根据 filename 查询 sourcemaps 表获取最新的 Git 信息
+   * 3. 将 Git 信息附加到返回结果中
    *
    * @param eventId - 事件 ID（UUID）
    *
-   * @returns 单个事件的完整记录，如果不存在返回 null
+   * @returns 单个事件的完整记录（包含 Git 信息），如果不存在返回 null
    */
   async getErrorById(eventId: string) {
     const result = await this.pg.query(
@@ -224,7 +234,34 @@ export class QueryService {
       [eventId, 'error'],
     );
 
-    return result.rows[0] || null;
+    const event = result.rows[0] || null;
+
+    if (!event) {
+      return null;
+    }
+
+    const filename = event.payload?.filename;
+    if (filename) {
+      const gitResult = await this.pg.query(
+        `SELECT git_commit, git_author, git_message, git_branch
+         FROM sourcemaps
+         WHERE filename = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [filename],
+      );
+
+      if (gitResult.rows.length > 0) {
+        event.git = {
+          commit: gitResult.rows[0].git_commit,
+          author: gitResult.rows[0].git_author,
+          message: gitResult.rows[0].git_message,
+          branch: gitResult.rows[0].git_branch,
+        };
+      }
+    }
+
+    return event;
   }
 
   /**

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/pack.ts"],
+  "sourcesContent": ["import { strFromU8, strToU8, zlibSync } from 'fflate';\nimport type { PackFn } from '@rrweb/types';\nimport { type eventWithTimeAndPacker, MARK } from './base';\n\nexport const pack: PackFn = (event) => {\n  const _e: eventWithTimeAndPacker = {\n    ...event,\n    v: MARK,\n  };\n  return strFromU8(zlibSync(strToU8(JSON.stringify(_e))), true);\n};\n"],
+  "mappings": ";;;;;;;;;;;;;oiBAIaA,EAAgBC,GAAU,CACrC,MAAMC,EAA6BC,EAAAC,EAAA,GAC9BH,GAD8B,CAEjC,EAAGI,EAAA,IAAA,GAEE,OAAAC,EAAA,UAAUC,EAAAA,SAASC,EAAAA,QAAQ,KAAK,UAAUN,CAAE,CAAC,CAAC,EAAG,EAAI,CAC9D",
+  "names": ["pack", "event", "_e", "__spreadProps", "__spreadValues", "MARK", "strFromU8", "zlibSync", "strToU8"]
+}

@@ -49,6 +49,11 @@
  * 10. HealthModule — 健康检查模块
  *     - GET /health — 检查 PG 和 Redis 连通性
  *     - 用于 Docker/K8s 探针和面试演示验证
+ *
+ * 11. AlertModule — 告警模块
+ *     - 定时扫描高频错误
+ *     - 通过飞书/钉钉等渠道发送告警
+ *     - 支持控频机制，避免重复告警
  * ===============================================================
  */
 
@@ -63,6 +68,7 @@ import { QueryModule } from './query/query.module';
 import { SourcemapModule } from './sourcemap/sourcemap.module';
 import { WorkerModule } from './worker/worker.module';
 import { HealthModule } from './health/health.module';
+import { AlertModule } from './alert';
 
 @Module({
   imports: [
@@ -127,6 +133,9 @@ import { HealthModule } from './health/health.module';
 
     /** 健康检查模块 — GET /health */
     HealthModule,
+
+    /** 告警模块 — 定时扫描高频错误并发送告警 */
+    AlertModule,
   ],
 })
 export class AppModule {}

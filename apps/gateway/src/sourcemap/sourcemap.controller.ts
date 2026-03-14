@@ -123,13 +123,19 @@ export class SourcemapController {
 
     /**
      * 将文件路径和元信息记录到数据库
-     * 如果同一 appId + version + filename 已存在，会更新 map_path
+     * 如果同一 appId + version + filename 已存在，会更新 map_path 和 Git 信息
      */
     const record = await this.sourcemapService.upload(
       body.appId,
       body.version,
       body.filename,
       mapFilePath,
+      {
+        gitCommit: body.gitCommit,
+        gitAuthor: body.gitAuthor,
+        gitMessage: body.gitMessage,
+        gitBranch: body.gitBranch,
+      },
     );
 
     return {
