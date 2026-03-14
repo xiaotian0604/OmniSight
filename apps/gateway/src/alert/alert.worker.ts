@@ -27,7 +27,7 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AlertService } from './alert.service';
 import { AlertChannel } from './channels/channel.interface';
-import { ALERT_CHANNELS } from './alert.module';
+import { ALERT_CHANNELS } from './alert.constants';
 
 /**
  * 告警定时任务 Worker

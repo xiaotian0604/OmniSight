@@ -36,29 +36,13 @@
  * ===============================================================
  */
 
-import { Module, InjectionToken } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AlertService } from './alert.service';
 import { AlertWorker } from './alert.worker';
 import { AlertChannel } from './channels/channel.interface';
 import { FeishuChannel } from './channels/feishu.channel';
-
-/**
- * AlertChannel 注入 Token
- *
- * 使用 InjectionToken 将所有 AlertChannel 实现收集为数组。
- * 这样 AlertWorker 可以注入 AlertChannel[] 获取所有告警渠道。
- *
- * 使用方式：
- * constructor(
- *   @Inject(ALERT_CHANNELS) private readonly channels: AlertChannel[],
- * ) {}
- *
- * 面试要点：
- * - InjectionToken 是 NestJS 中用于多例注入的标准方式
- * - 配合 useFactory 可以动态收集所有实现了某接口的 Provider
- */
-export const ALERT_CHANNELS: InjectionToken<AlertChannel[]> = 'ALERT_CHANNELS';
+import { ALERT_CHANNELS } from './alert.constants';
 
 /**
  * 告警模块定义

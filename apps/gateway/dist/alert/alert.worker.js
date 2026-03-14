@@ -17,7 +17,7 @@ exports.AlertWorker = void 0;
 const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const alert_service_1 = require("./alert.service");
-const alert_module_1 = require("./alert.module");
+const alert_constants_1 = require("./alert.constants");
 let AlertWorker = AlertWorker_1 = class AlertWorker {
     constructor(alertService, channels) {
         this.alertService = alertService;
@@ -62,7 +62,7 @@ __decorate([
 ], AlertWorker.prototype, "handleAlertScan", null);
 exports.AlertWorker = AlertWorker = AlertWorker_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(1, (0, common_1.Inject)(alert_module_1.ALERT_CHANNELS)),
+    __param(1, (0, common_1.Inject)(alert_constants_1.ALERT_CHANNELS)),
     __metadata("design:paramtypes", [alert_service_1.AlertService, Array])
 ], AlertWorker);
 //# sourceMappingURL=alert.worker.js.map

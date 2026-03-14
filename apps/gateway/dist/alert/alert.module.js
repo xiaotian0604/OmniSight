@@ -6,13 +6,13 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AlertModule = exports.ALERT_CHANNELS = void 0;
+exports.AlertModule = void 0;
 const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const alert_service_1 = require("./alert.service");
 const alert_worker_1 = require("./alert.worker");
 const feishu_channel_1 = require("./channels/feishu.channel");
-exports.ALERT_CHANNELS = 'ALERT_CHANNELS';
+const alert_constants_1 = require("./alert.constants");
 let AlertModule = class AlertModule {
 };
 exports.AlertModule = AlertModule;
@@ -25,7 +25,7 @@ exports.AlertModule = AlertModule = __decorate([
             alert_service_1.AlertService,
             feishu_channel_1.FeishuChannel,
             {
-                provide: exports.ALERT_CHANNELS,
+                provide: alert_constants_1.ALERT_CHANNELS,
                 useFactory: (feishu) => {
                     return [feishu];
                 },
