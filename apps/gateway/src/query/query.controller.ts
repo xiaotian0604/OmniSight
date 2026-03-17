@@ -38,6 +38,31 @@ export class QueryController {
   ) {}
 
   /**
+   * GET /v1/apps — 获取所有 appId 列表
+   *
+   * 接口用途：
+   * console 前端调用此接口获取所有可用的 appId 列表，
+   * 用于在顶部导航栏展示项目选择器。
+   *
+   * @returns appId 列表，每个元素包含：
+   *   - app_id: 项目标识
+   *   - error_count: 错误事件数量
+   *   - total_count: 总事件数量
+   *   - last_seen: 最近事件时间
+   */
+  @Get('apps')
+  @ApiOperation({
+    summary: '获取 appId 列表',
+    description:
+      '返回所有有数据的 appId 列表，包含错误数量和总事件数量。' +
+      '用于 console 前端的项目选择器。',
+  })
+  @ApiResponse({ status: 200, description: '返回 appId 列表' })
+  async getApps() {
+    return this.queryService.getAppsList();
+  }
+
+  /**
    * GET /v1/errors — 错误聚合列表
    *
    * 接口用途：

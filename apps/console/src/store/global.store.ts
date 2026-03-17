@@ -47,16 +47,20 @@ export interface TimeRange {
  *
  * 状态（State）：
  * @property appId - 当前项目 ID（对应 projects 表的 api_key 或 id）
+ * @property appIdList - 可用项目 ID 列表，用于项目切换下拉框
  * @property timeRange - 全局时间范围，影响所有数据查询
  *
  * 操作（Actions）：
  * @property setAppId - 切换当前项目，同时持久化到 localStorage
+ * @property setAppIdList - 更新可用项目列表
  * @property setTimeRange - 更新时间范围，触发所有依赖此范围的查询重新执行
  */
 interface GlobalStore {
   appId: string;
+  appIdList: string[];
   timeRange: TimeRange;
   setAppId: (appId: string) => void;
+  setAppIdList: (list: string[]) => void;
   setTimeRange: (range: TimeRange) => void;
 }
 
@@ -111,6 +115,12 @@ export const useGlobalStore = create<GlobalStore>((set) => ({
   appId: getPersistedAppId(),
 
   /**
+   * 可用项目 ID 列表
+   * 初始值为空数组，由应用启动时从 API 加载
+   */
+  appIdList: [],
+
+  /**
    * 全局时间范围
    * 初始值为最近 1 小时
    * TimeRangePicker 组件和各页面的数据查询 hook 都会读取此值
@@ -130,6 +140,18 @@ export const useGlobalStore = create<GlobalStore>((set) => ({
   setAppId: (appId: string) => {
     localStorage.setItem('omnisight-app-id', appId);
     set({ appId });
+  },
+
+  /**
+   * 更新可用项目列表
+   *
+   * 当从 API 获取到项目列表后调用，更新 appIdList 状态
+   * 项目选择器组件会读取此列表渲染下拉选项
+   *
+   * @param list - 项目 ID 数组
+   */
+  setAppIdList: (list: string[]) => {
+    set({ appIdList: list });
   },
 
   /**

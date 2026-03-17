@@ -33,6 +33,7 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
+import { AppIdSelector } from '@/components/AppIdSelector';
 
 /**
  * 路由懒加载配置
@@ -139,9 +140,13 @@ export default function App() {
 
       {/* ==================== 主内容区 ==================== */}
       <main className="main-content">
-        {/* 顶部 Header：项目名称 + 全局时间范围选择器 */}
+        {/* 顶部 Header：项目选择器 + 全局时间范围选择器 */}
         <header className="top-header">
           <h1 className="header-title">OmniSight 控制台</h1>
+          
+          {/* 项目选择器：切换当前查看的 appId */}
+          <AppIdSelector />
+          
           {/*
             TimeRangePicker: 全局时间范围选择器
             选择的时间范围会写入 Zustand 全局 store，

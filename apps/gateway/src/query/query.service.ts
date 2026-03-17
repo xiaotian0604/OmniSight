@@ -157,6 +157,40 @@ export class QueryService {
   }
 
   /**
+   * 获取所有 appId 列表
+   *
+   * 业务场景：
+   * console 前端的项目选择器。展示所有有数据的 appId，
+   * 每个 appId 显示错误数量、总事件数量和最近活动时间。
+   *
+   * 实现细节：
+   * - GROUP BY app_id 按项目分组
+   * - COUNT(*) FILTER (WHERE type = 'error') 统计错误数量
+   * - COUNT(*) 统计总事件数量
+   * - MAX(ts) 获取最近事件时间
+   *
+   * @returns appId 列表，每个元素包含：
+   *   - app_id: 项目标识
+   *   - error_count: 错误事件数量
+   *   - total_count: 总事件数量
+   *   - last_seen: 最近事件时间
+   */
+  async getAppsList() {
+    const result = await this.pg.query(
+      `SELECT
+         app_id AS "appId",
+         COUNT(*) FILTER (WHERE type = 'error') AS "errorCount",
+         COUNT(*) AS "totalCount",
+         MAX(ts) AS "lastSeen"
+       FROM events
+       GROUP BY app_id
+       ORDER BY MAX(ts) DESC`,
+    );
+
+    return result.rows;
+  }
+
+  /**
    * 获取错误聚合列表（按指纹分组）
    *
    * 业务场景：
@@ -190,10 +224,10 @@ export class QueryService {
          fingerprint,
          payload->>'message' AS message,
          payload->>'filename' AS filename,
-         COUNT(*)              AS count,
-         COUNT(DISTINCT session_id) AS affected_users,
-         MAX(ts)               AS last_seen,
-         MIN(ts)               AS first_seen
+         COUNT(*)              AS "count",
+         COUNT(DISTINCT session_id) AS "affectedUsers",
+         MAX(ts)               AS "lastSeen",
+         MIN(ts)               AS "firstSeen"
        FROM events
        WHERE app_id = $1
          AND type = 'error'

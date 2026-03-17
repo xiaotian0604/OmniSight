@@ -70,15 +70,26 @@ let QueryService = class QueryService {
             return 'day';
         return 'hour';
     }
+    async getAppsList() {
+        const result = await this.pg.query(`SELECT
+         app_id AS "appId",
+         COUNT(*) FILTER (WHERE type = 'error') AS "errorCount",
+         COUNT(*) AS "totalCount",
+         MAX(ts) AS "lastSeen"
+       FROM events
+       GROUP BY app_id
+       ORDER BY MAX(ts) DESC`);
+        return result.rows;
+    }
     async getErrorsGrouped(appId, from, to, limit = 50) {
         const result = await this.pg.query(`SELECT
          fingerprint,
          payload->>'message' AS message,
          payload->>'filename' AS filename,
-         COUNT(*)              AS count,
-         COUNT(DISTINCT session_id) AS affected_users,
-         MAX(ts)               AS last_seen,
-         MIN(ts)               AS first_seen
+         COUNT(*)              AS "count",
+         COUNT(DISTINCT session_id) AS "affectedUsers",
+         MAX(ts)               AS "lastSeen",
+         MIN(ts)               AS "firstSeen"
        FROM events
        WHERE app_id = $1
          AND type = 'error'

@@ -20,6 +20,9 @@ let QueryController = class QueryController {
     constructor(queryService) {
         this.queryService = queryService;
     }
+    async getApps() {
+        return this.queryService.getAppsList();
+    }
     async getErrors(appId, from, to, limit) {
         return this.queryService.getErrorsGrouped(appId, from, to, limit ? parseInt(limit, 10) : 50);
     }
@@ -37,6 +40,18 @@ let QueryController = class QueryController {
     }
 };
 exports.QueryController = QueryController;
+__decorate([
+    (0, common_1.Get)('apps'),
+    (0, swagger_1.ApiOperation)({
+        summary: '获取 appId 列表',
+        description: '返回所有有数据的 appId 列表，包含错误数量和总事件数量。' +
+            '用于 console 前端的项目选择器。',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: '返回 appId 列表' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], QueryController.prototype, "getApps", null);
 __decorate([
     (0, common_1.Get)('errors'),
     (0, swagger_1.ApiOperation)({

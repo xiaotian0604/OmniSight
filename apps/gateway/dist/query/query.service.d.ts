@@ -4,6 +4,7 @@ export declare class QueryService {
     constructor(pg: Pool);
     getErrorRateSeries(appId: string, from: string, to: string, interval?: string): Promise<any[]>;
     private intervalToTruncPrecision;
+    getAppsList(): Promise<any[]>;
     getErrorsGrouped(appId: string, from: string, to: string, limit?: number): Promise<any[]>;
     getErrorById(eventId: string): Promise<any>;
     getApiMetrics(appId: string, from: string, to: string, limit?: number): Promise<any[]>;
