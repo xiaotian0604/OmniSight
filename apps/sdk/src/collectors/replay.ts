@@ -89,7 +89,7 @@ export function initReplayCollector(core: Core): () => void {
    * rrweb 停止录制的函数引用
    * rrweb.record() 返回一个 stop 函数，调用后停止录制
    */
-  let stopRecording: (() => void) | null = null;
+  let stopRecording: (() => void) | null | undefined = null;
 
   /**
    * 动态导入 rrweb 并启动录制

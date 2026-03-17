@@ -178,7 +178,7 @@ export interface OmniErrorEvent extends BaseEvent {
  * 为外部使用者提供符合直觉的 ErrorEvent 命名
  * 内部使用 OmniErrorEvent 避免与浏览器原生 ErrorEvent 冲突
  */
-export { OmniErrorEvent as ErrorEvent };
+export type { OmniErrorEvent as ErrorEvent };
 
 // ========================= 接口请求事件 =========================
 

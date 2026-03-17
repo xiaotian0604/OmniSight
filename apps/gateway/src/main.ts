@@ -60,7 +60,22 @@ async function bootstrap() {
    * 允许 apps/console 前端（默认运行在 localhost:5173）调用 gateway 接口
    * 生产环境应配置具体的 origin 白名单
    */
-  app.enableCors();
+  // app.enableCors();
+  app.enableCors({
+    // origin: ['http://localhost:8080', 'http://127.0.0.1:8080'],  // 明确写出你的前端 origin
+    // 或更宽松的开发写法：origin: true  （让它反射请求的 Origin 头）
+    origin: true,
+
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Api-Key',
+      'x-api-key',
+    ],
+  });
 
   /**
    * Swagger API 文档配置
@@ -100,6 +115,33 @@ async function bootstrap() {
   if (nodeEnv !== 'production') {
     console.log(`[OmniSight Gateway] Swagger 文档: http://localhost:${port}/api-docs`);
   }
+
+  /**
+   * 优雅关闭（Graceful Shutdown）
+   * 
+   * 当接收到终止信号（SIGTERM、SIGINT）时，NestJS 会：
+   * 1. 停止接受新连接
+   * 2. 等待现有连接处理完成
+   * 3. 关闭所有资源（数据库连接、Redis 连接等）
+   * 4. 最后退出进程
+   * 
+   * 这可以避免热重载时出现 "EADDRINUSE" 错误
+   */
+  const gracefulShutdown = async (signal: string) => {
+    console.log(`[OmniSight Gateway] 收到 ${signal} 信号，开始优雅关闭...`);
+    try {
+      await app.close();
+      console.log('[OmniSight Gateway] 服务已优雅关闭');
+      process.exit(0);
+    } catch (error) {
+      console.error('[OmniSight Gateway] 优雅关闭失败:', error);
+      process.exit(1);
+    }
+  };
+
+  /* 监听终止信号 */
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 bootstrap();

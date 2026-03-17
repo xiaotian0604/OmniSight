@@ -22,15 +22,16 @@
  */
 
 /**
- * 通过 XMLHttpRequest 发送数据（Beacon API 的 fallback 方案）
+ * 通过 XMLHttpRequest 发送数据（fetch 的 fallback 方案）
  *
  * 创建一个 XHR POST 请求，将 JSON 数据发送到指定 URL。
  * 这是一个"发出即忘"的操作，不关心响应结果。
  *
  * @param {string} url - 数据发送的目标 URL
  * @param {string} payload - 要发送的 JSON 字符串
+ * @param {string} apiKey - API Key，用于身份验证，会在请求 header 中携带
  */
-export function sendViaXHR(url: string, payload: string): void {
+export function sendViaXHR(url: string, payload: string, apiKey: string): void {
   try {
     /**
      * 创建 XMLHttpRequest 实例
@@ -51,6 +52,13 @@ export function sendViaXHR(url: string, payload: string): void {
      * 告知服务端请求体是 JSON 格式
      */
     xhr.setRequestHeader('Content-Type', 'application/json');
+
+    /**
+     * 设置 x-api-key 请求头
+     * Gateway 的 ApiKeyGuard 会验证此 header 的合法性
+     * 这是 SDK 与 Gateway 身份验证的关键
+     */
+    xhr.setRequestHeader('x-api-key', apiKey);
 
     /**
      * 发送请求

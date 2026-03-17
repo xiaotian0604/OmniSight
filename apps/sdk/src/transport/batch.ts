@@ -38,7 +38,7 @@ import { sendViaXHR } from './xhr';
  *
  * @example
  * ```typescript
- * const transport = new BatchTransport('https://gateway.example.com');
+ * const transport = new BatchTransport('https://gateway.example.com', 'your-api-key');
  * transport.add({ type: 'error', message: 'Something went wrong' });
  * // 事件会在 5 秒后或累积 20 条时自动发送
  * transport.destroy(); // 强制 flush 并清理资源
@@ -53,6 +53,9 @@ export class BatchTransport {
 
   /** 数据上报的目标 URL（Gateway 的批量上报接口） */
   private endpoint: string;
+
+  /** API Key，用于身份验证，会在请求 header 中携带 */
+  private apiKey: string;
 
   /** 批量上报的最大条数：队列中累积到此数量时立即 flush */
   private readonly MAX_BATCH_SIZE = 20;
@@ -71,13 +74,20 @@ export class BatchTransport {
    * 构造函数
    *
    * @param {string} dsn - 数据上报地址（Gateway 服务的基础 URL）
+   * @param {string} apiKey - API Key，用于身份验证
    */
-  constructor(dsn: string) {
+  constructor(dsn: string, apiKey: string) {
     /**
      * 拼接完整的上报接口 URL
      * 移除 dsn 末尾可能存在的斜杠，然后拼接 /v1/ingest/batch 路径
      */
     this.endpoint = `${dsn.replace(/\/$/, '')}/v1/ingest/batch`;
+
+    /**
+     * 保存 API Key，用于在请求 header 中携带
+     * Gateway 会通过 ApiKeyGuard 校验此 key 的合法性
+     */
+    this.apiKey = apiKey;
 
     /**
      * 创建 beforeunload 事件处理函数
@@ -131,14 +141,16 @@ export class BatchTransport {
    * 1. 清除定时器（防止重复 flush）
    * 2. 取出队列中的所有事件（使用 splice 清空队列）
    * 3. 将事件序列化为 JSON
-   * 4. 优先使用 sendBeacon 发送
-   * 5. 如果 sendBeacon 失败（返回 false），fallback 到 XHR
+   * 4. 使用 fetch API 发送（支持自定义 header，携带 x-api-key）
+   * 5. 如果 fetch 失败，fallback 到 XHR
    *
    * 设计决策：
    * - 使用 splice(0) 而非赋值空数组来清空队列，原因：
    *   splice 返回被移除的元素，一步完成"取出 + 清空"操作
-   * - flush 是同步方法（sendBeacon 本身是同步的），
-   *   确保在 beforeunload 事件中能可靠执行
+   * - 优先使用 fetch 而非 sendBeacon，原因：
+   *   sendBeacon 不支持自定义 header，无法携带 x-api-key
+   *   Gateway 的 ApiKeyGuard 需要验证 x-api-key header
+   * - flush 是同步方法，确保在 beforeunload 事件中能可靠执行
    */
   private flush(): void {
     /* 如果队列为空，无需 flush */
@@ -162,22 +174,26 @@ export class BatchTransport {
     const payload = JSON.stringify(batch);
 
     /**
-     * 优先使用 sendBeacon API 发送数据
-     * sendViaBeacon 返回 true 表示发送成功，false 表示发送失败
+     * 使用 fetch API 发送数据
+     * fetch 支持自定义 header，可以携带 x-api-key
+     * Gateway 的 ApiKeyGuard 会验证此 header
      */
-    const beaconSuccess = sendViaBeacon(this.endpoint, payload);
-
-    /**
-     * 如果 sendBeacon 失败，fallback 到 XHR
-     *
-     * sendBeacon 可能失败的原因：
-     * 1. 浏览器不支持 sendBeacon API
-     * 2. 数据超过 64KB 限制
-     * 3. 浏览器的 sendBeacon 队列已满
-     */
-    if (!beaconSuccess) {
-      sendViaXHR(this.endpoint, payload);
-    }
+    fetch(this.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey,  /* 携带 API Key 进行身份验证 */
+      },
+      body: payload,
+      keepalive: true,  /* keepalive 允许在页面卸载后继续发送 */
+      credentials: 'omit',  /* 不发送 Cookie，避免 CORS credentials 模式 */
+    }).catch(() => {
+      /**
+       * fetch 失败时 fallback 到 XHR
+       * XHR 也支持自定义 header，可以携带 x-api-key
+       */
+      sendViaXHR(this.endpoint, payload, this.apiKey);
+    });
   }
 
   /**

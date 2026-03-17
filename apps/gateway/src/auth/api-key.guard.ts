@@ -83,10 +83,11 @@ export class ApiKeyGuard implements CanActivate {
      *   headers: { 'x-api-key': 'dev-api-key-omnisight' }
      */
     const apiKey = request.headers['x-api-key'] as string | undefined;
+    console.log(apiKey,"<==== apiKey")
 
     if (!apiKey) {
       throw new UnauthorizedException(
-        '缺少 x-api-key Header，请在 SDK init 时配置正确的 apiKey',
+        '缺少 x-api-key Header !!，请在 SDK init 时配置正确的 apiKey',
       );
     }
 

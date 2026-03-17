@@ -148,8 +148,8 @@ export function init(config: OmniSightConfig & { userId?: string }): void {
      * 当 replay 采集器检测到错误并收集完录像数据后，会调用 core.uploadReplay()。
      * 这里定义了 uploadReplay 的具体行为：将录像数据发送到 Gateway 的 /v1/replay 接口。
      *
-     * 使用 sendBeacon 优先发送，因为录像数据可能在页面即将关闭时上传。
-     * 如果 sendBeacon 失败（数据过大），降级使用 fetch。
+     * 使用 fetch 优先发送，因为需要携带 x-api-key header 进行身份验证。
+     * sendBeacon 不支持自定义 header，无法携带 x-api-key。
      *
      * @param {unknown[]} events - rrweb 录制的事件数组
      */
@@ -165,28 +165,25 @@ export function init(config: OmniSightConfig & { userId?: string }): void {
       const url = `${core.getConfig().dsn.replace(/\/$/, '')}/v1/replay`;
 
       /**
-       * 优先使用 sendBeacon 发送
-       * 录像数据可能较大，如果超过 64KB 限制，sendBeacon 会返回 false
+       * 使用 fetch API 发送录像数据
+       * fetch 支持自定义 header，可以携带 x-api-key
+       * Gateway 的 ApiKeyGuard 会验证此 header
        */
-      const beaconSuccess = sendViaBeacon(url, payload);
-
-      /**
-       * 如果 sendBeacon 失败，降级使用 fetch
-       * fetch 没有数据大小限制，但在页面卸载时可能被取消
-       */
-      if (!beaconSuccess) {
-        try {
-          fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: payload,
-            keepalive: true,                       /* keepalive 允许在页面卸载后继续发送 */
-          }).catch(() => {
-            /* fetch 失败时静默忽略，录像数据丢失是可接受的 */
-          });
-        } catch {
-          /* fetch 调用本身失败时静默忽略 */
-        }
+      try {
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': core.getConfig().apiKey,  /* 携带 API Key 进行身份验证 */
+          },
+          body: payload,
+          keepalive: true,                       /* keepalive 允许在页面卸载后继续发送 */
+          credentials: 'omit',                   /* 不发送 Cookie，避免 CORS credentials 模式 */
+        }).catch(() => {
+          /* fetch 失败时静默忽略，录像数据丢失是可接受的 */
+        });
+      } catch {
+        /* fetch 调用本身失败时静默忽略 */
       }
     };
 

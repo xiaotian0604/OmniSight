@@ -12,7 +12,18 @@ async function bootstrap() {
         forbidNonWhitelisted: false,
         transform: true,
     }));
-    app.enableCors();
+    app.enableCors({
+        origin: true,
+        credentials: true,
+        methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'],
+        allowedHeaders: [
+            'Content-Type',
+            'Authorization',
+            'Accept',
+            'X-Api-Key',
+            'x-api-key',
+        ],
+    });
     const configService = app.get(config_1.ConfigService);
     const nodeEnv = configService.get('NODE_ENV', 'development');
     if (nodeEnv !== 'production') {
@@ -33,6 +44,20 @@ async function bootstrap() {
     if (nodeEnv !== 'production') {
         console.log(`[OmniSight Gateway] Swagger 文档: http://localhost:${port}/api-docs`);
     }
+    const gracefulShutdown = async (signal) => {
+        console.log(`[OmniSight Gateway] 收到 ${signal} 信号，开始优雅关闭...`);
+        try {
+            await app.close();
+            console.log('[OmniSight Gateway] 服务已优雅关闭');
+            process.exit(0);
+        }
+        catch (error) {
+            console.error('[OmniSight Gateway] 优雅关闭失败:', error);
+            process.exit(1);
+        }
+    };
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

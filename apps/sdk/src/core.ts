@@ -50,6 +50,8 @@ export interface OmniSightConfig {
   appId: string;
   /** 数据上报地址（Data Source Name），指向 Gateway 服务 */
   dsn: string;
+  /** API Key，用于身份验证，必须在 Gateway 注册的项目 api_key */
+  apiKey: string;
   /** 正常事件的采样率，取值范围 [0, 1]，默认 0.1（10%） */
   sampleRate?: number;
   /** 是否启用 rrweb 用户操作录制，默认 false */
@@ -69,6 +71,8 @@ export interface ResolvedConfig {
   appId: string;
   /** 数据上报地址 */
   dsn: string;
+  /** API Key，用于身份验证 */
+  apiKey: string;
   /** 正常事件的采样率（已确定值） */
   sampleRate: number;
   /** 是否启用 rrweb 录制（已确定值） */
@@ -223,6 +227,7 @@ export class Core {
       /* 必填字段直接使用用户传入的值 */
       appId: config.appId,
       dsn: config.dsn,
+      apiKey: config.apiKey,  /* API Key 用于身份验证 */
       /* 可选字段使用 ?? 运算符填充默认值 */
       sampleRate: config.sampleRate ?? 0.1,         /* 默认 10% 采样率 */
       enableReplay: config.enableReplay ?? false,    /* 默认不启用录制 */
@@ -230,14 +235,16 @@ export class Core {
       debug: config.debug ?? false,                  /* 默认不开启调试模式 */
     };
 
+    console.log(this.config.apiKey,"<=-== apiKey")
+
     /* 初始化采样器，传入配置的采样率 */
     this.sampler = new Sampler(this.config.sampleRate);
 
     /* 初始化去重器，使用默认参数（容量 100，TTL 60 秒） */
     this.deduplicator = new Deduplicator();
 
-    /* 初始化批量上报器，传入上报地址 */
-    this.transport = new BatchTransport(this.config.dsn);
+    /* 初始化批量上报器，传入上报地址和 API Key */
+    this.transport = new BatchTransport(this.config.dsn, this.config.apiKey);
 
     /* 调试模式下输出初始化信息 */
     if (this.config.debug) {

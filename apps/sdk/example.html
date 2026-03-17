@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniSight SDK 使用示例</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .example {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    code {
+      background: #e8e8e8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+    pre {
+      background: #2d2d2d;
+      color: #f8f8f2;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    .note {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 10px 15px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🚀 OmniSight SDK 使用示例</h1>
+  
+  <div class="note">
+    <strong>重要提示：</strong>在使用之前，请确保：
+    <ol>
+      <li>已经运行 <code>pnpm install</code> 安装依赖</li>
+      <li>已经运行 <code>pnpm build</code> 构建 SDK</li>
+      <li>Gateway 服务正在运行（默认端口 3000）</li>
+      <li>已获取有效的 API Key（在 Gateway 管理后台注册项目）</li>
+    </ol>
+  </div>
+
+  <h2>方法 1：使用 IIFE 格式（推荐用于简单 HTML 页面）</h2>
+  <div class="example">
+    <p>直接通过 <code>&lt;script&gt;</code> 标签引入，SDK 会挂载到全局变量 <code>OmniSight</code>：</p>
+    <pre><code>&lt;!-- 引入 SDK IIFE 版本 --&gt;
+&lt;script src="./node_modules/@omnisight/sdk/dist/omnisight.iife.js"&gt;&lt;/script&gt;
+
+&lt;script&gt;
+  // 初始化 SDK
+  const tracker = OmniSight.init({
+    appId: 'your-app-id',
+    dsn: 'http://localhost:3000/v1/ingest',
+    apiKey: 'your-api-key',
+    enableError: true,
+    enablePerformance: true,
+    enableReplay: false, // 需要安装 rrweb 依赖
+    debug: true,
+  });
+  
+  console.log('OmniSight SDK 已初始化', tracker);
+  
+  // 手动捕获错误
+  tracker.capture({
+    type: 'error',
+    message: '测试错误',
+    stack: new Error().stack,
+  });
+&lt;/script&gt;</code></pre>
+  </div>
+
+  <h2>方法 2：使用 ES 模块（需要构建工具）</h2>
+  <div class="example">
+    <p>如果你使用 Vite、Webpack 等现代构建工具：</p>
+    <pre><code>// 在你的项目代码中
+import OmniSight from '@omnisight/sdk';
+
+const tracker = OmniSight.init({
+  appId: 'your-app-id',
+  dsn: 'http://localhost:3000/v1/ingest',
+  apiKey: 'your-api-key',
+  enableError: true,
+  enablePerformance: true,
+  debug: true,
+});
+
+export default tracker;</code></pre>
+  </div>
+
+  <h2>方法 3：使用 Import Maps（现代浏览器原生支持）</h2>
+  <div class="example">
+    <p>在没有构建工具的情况下使用 ES 模块：</p>
+    <pre><code>&lt;!-- 使用 import map 映射模块标识符 --&gt;
+&lt;script type="importmap"&gt;
+  {
+    "imports": {
+      "@omnisight/sdk": "./node_modules/@omnisight/sdk/dist/omnisight.esm.js"
+    }
+  }
+&lt;/script&gt;
+
+&lt;script type="module"&gt;
+  import OmniSight from '@omnisight/sdk';
+  
+  const tracker = OmniSight.init({
+    appId: 'your-app-id',
+    dsn: 'http://localhost:3000/v1/ingest',
+    apiKey: 'your-api-key',
+    debug: true,
+  });
+  
+  console.log('OmniSight SDK 已初始化', tracker);
+&lt;/script&gt;</code></pre>
+  </div>
+
+  <h2>SDK 配置选项</h2>
+  <div class="example">
+    <pre><code>OmniSight.init({
+  // 应用 ID（必填）
+  appId: 'your-app-id',
+  
+  // 数据接收地址（必填）
+  dsn: 'http://localhost:3000/v1/ingest',
+  
+  // API Key（可选，用于身份验证）
+  apiKey: 'your-api-key',
+  
+  // 采样率（可选，默认 0.1）
+  sampleRate: 0.1,
+  
+  // 是否启用错误采集（默认 true）
+  enableError: true,
+  
+  // 是否启用性能采集（默认 true）
+  enablePerformance: true,
+  
+  // 是否启用用户行为录制（默认 false，需要安装 rrweb）
+  enableReplay: false,
+  
+  // 隐私配置（可选）
+  privacy: {
+    maskInputs: true, // 遮盖输入框
+    blockSelectors: ['.sensitive-data'], // 屏蔽特定元素
+  },
+  
+  // 是否开启调试模式（默认 false）
+  debug: true,
+});</code></pre>
+  </div>
+
+  <h2>实际演示</h2>
+  <div class="example">
+    <p>点击下面的按钮会触发一个测试错误：</p>
+    <button onclick="triggerError()">触发测试错误</button>
+    <button onclick="triggerCustomEvent()">触发自定义事件</button>
+  </div>
+
+  <!-- 实际引入 SDK -->
+  <script src="./node_modules/@omnisight/sdk/dist/omnisight.iife.js"></script>
+  <script>
+    // 初始化 SDK
+    const tracker = OmniSight.init({
+      appId: 'your-app-id',           // 应用 ID（必填）
+      dsn: 'http://localhost:3000/v1/ingest',  // 数据接收地址（必填）
+      apiKey: 'your-api-key',         // API Key（必填，在 Gateway 管理后台获取）
+      enableError: true,
+      enablePerformance: true,
+      debug: true,
+    });
+    
+    console.log('✅ OmniSight SDK 已初始化', tracker);
+    
+    // 手动捕获错误
+    tracker.capture({
+      type: 'error',
+      message: '测试错误',
+      stack: new Error().stack,
+    });
+  </script>
+</body>
+</html>
