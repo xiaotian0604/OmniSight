@@ -35,7 +35,9 @@ let AlertService = AlertService_1 = class AlertService {
             windowMinutes: this.configService.get('ALERT_WINDOW_MINUTES', 5),
             cooldownMinutes: this.configService.get('ALERT_COOLDOWN_MINUTES', 30),
         };
+        console.log(this.ruleConfig, "<==== ruleConfig");
         this.alertEnabled = this.configService.get('ALERT_ENABLED', 'false').toLowerCase() === 'true';
+        console.log(this.alertEnabled, "<=== alertEnabled");
         this.logger.log(`告警服务初始化: enabled=${this.alertEnabled}, ` +
             `threshold=${this.ruleConfig.threshold}, ` +
             `window=${this.ruleConfig.windowMinutes}min, ` +

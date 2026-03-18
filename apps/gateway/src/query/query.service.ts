@@ -318,31 +318,39 @@ export class QueryService {
   }
 
   private async findErrorEvent(identifier: string, appId?: string) {
-    const byId = await this.pg.query(
-      'SELECT * FROM events WHERE id = $1 AND type = $2 LIMIT 1',
-      [identifier, 'error'],
-    );
+    let event: any = null;
 
-    if (byId.rows[0]) {
-      return byId.rows[0];
+    if (appId) {
+      const byFingerprint = await this.pg.query(
+        `SELECT *
+         FROM events
+         WHERE app_id = $1
+           AND type = 'error'
+           AND fingerprint = $2
+         ORDER BY ts DESC
+         LIMIT 1`,
+        [appId, identifier],
+      );
+      
+      if (byFingerprint.rows[0]) {
+        return byFingerprint.rows[0];
+      }
     }
 
-    if (!appId) {
-      return null;
+    try {
+      const byId = await this.pg.query(
+        'SELECT * FROM events WHERE id = $1 AND type = $2 LIMIT 1',
+        [identifier, 'error'],
+      );
+
+      if (byId.rows[0]) {
+        return byId.rows[0];
+      }
+    } catch (err) {
+      console.warn('findErrorEvent: UUID 查询失败，可能不是 UUID 格式:', identifier);
     }
 
-    const byFingerprint = await this.pg.query(
-      `SELECT *
-       FROM events
-       WHERE app_id = $1
-         AND type = 'error'
-         AND fingerprint = $2
-       ORDER BY ts DESC
-       LIMIT 1`,
-      [appId, identifier],
-    );
-
-    return byFingerprint.rows[0] || null;
+    return null;
   }
 
   private async getErrorAggregate(appId: string, fingerprint: string) {

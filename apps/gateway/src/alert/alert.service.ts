@@ -102,10 +102,14 @@ export class AlertService {
       ),
     };
 
+    console.log(this.ruleConfig,"<==== ruleConfig")
+
     this.alertEnabled = this.configService.get<string>(
       'ALERT_ENABLED',
       'false',
     ).toLowerCase() === 'true';
+
+    console.log(this.alertEnabled,"<=== alertEnabled")
 
     this.logger.log(
       `告警服务初始化: enabled=${this.alertEnabled}, ` +
