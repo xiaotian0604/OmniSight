@@ -57,15 +57,26 @@ function extractFetchUrl(input: RequestInfo | URL): string {
     return input;
   }
   /* 如果是 URL 对象，返回 href 属性 */
-  if (input instanceof URL) {
+  if (typeof URL !== 'undefined' && input instanceof URL) {
     return input.href;
   }
   /* 如果是 Request 对象，返回 url 属性 */
-  if (input instanceof Request) {
+  if (typeof Request !== 'undefined' && input instanceof Request) {
     return input.url;
   }
   /* 兜底：转换为字符串 */
   return String(input);
+}
+
+/**
+ * 获取高精度时间戳（毫秒）
+ * 浏览器支持 performance.now 时优先使用，降级到 Date.now。
+ */
+function getNow(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+  return Date.now();
 }
 
 /**
@@ -78,6 +89,13 @@ function extractFetchUrl(input: RequestInfo | URL): string {
  * @returns {() => void} cleanup 函数，调用后恢复原始的 XHR 和 Fetch
  */
 export function initApiCollector(core: Core): () => void {
+  /* 非浏览器环境（SSR/Node）下直接返回空 cleanup，避免访问 window 报错 */
+  if (typeof window === 'undefined') {
+    return (): void => {};
+  }
+
+  const globalWindow = window as Window & typeof globalThis;
+
   /* 获取 SDK 配置中的数据上报地址，用于过滤 SDK 自身请求 */
   const dsn = core.getConfig().dsn;
   /* 获取调试模式标志 */
@@ -91,94 +109,86 @@ export function initApiCollector(core: Core): () => void {
    * 保存原始的 XMLHttpRequest 构造函数引用
    * 用于在 cleanup 时恢复
    */
-  const OriginalXHR = window.XMLHttpRequest;
+  const OriginalXHR = globalWindow.XMLHttpRequest;
+  let originalOpen: typeof XMLHttpRequest.prototype.open | null = null;
+  let originalSend: typeof XMLHttpRequest.prototype.send | null = null;
+  let patchedXHR = false;
 
-  /**
-   * 保存原始的 XMLHttpRequest.prototype.open 方法引用
-   * 我们将重写此方法以拦截请求的 method 和 url
-   */
-  const originalOpen = OriginalXHR.prototype.open;
-
-  /**
-   * 保存原始的 XMLHttpRequest.prototype.send 方法引用
-   * 我们将重写此方法以记录请求开始时间和注册完成回调
-   */
-  const originalSend = OriginalXHR.prototype.send;
-
-  /**
-   * 重写 XMLHttpRequest.prototype.open 方法
-   *
-   * 透传所有 5 个参数给原始 open 方法，同时保存 method 和 url 到 XHR 实例上，
-   * 供后续 send 方法中使用。
-   *
-   * XMLHttpRequest.open() 的完整签名：
-   * open(method: string, url: string | URL, async?: boolean, user?: string | null, password?: string | null)
-   *
-   * 设计决策：使用 function 而非箭头函数，确保 this 指向 XHR 实例
-   */
-  OriginalXHR.prototype.open = function (
-    method: string,                               /* HTTP 方法（GET/POST/PUT/DELETE 等） */
-    url: string | URL,                            /* 请求的目标 URL */
-    async?: boolean,                              /* 是否异步（默认 true） */
-    user?: string | null,                         /* HTTP 认证用户名（可选） */
-    password?: string | null,                     /* HTTP 认证密码（可选） */
-  ): void {
-    /* 将 method 保存到 XHR 实例的自定义属性上，供 send 方法中使用 */
-    (this as XMLHttpRequest & { _omnisight_method?: string })._omnisight_method = method;
-    /* 将 url 转换为字符串并保存，URL 对象需要取 href 属性 */
-    (this as XMLHttpRequest & { _omnisight_url?: string })._omnisight_url =
-      typeof url === 'string' ? url : url.href;
-
-    /* 调用原始的 open 方法，透传所有参数 */
-    originalOpen.call(this, method, url, async ?? true, user ?? null, password ?? null);
-  };
-
-  /**
-   * 重写 XMLHttpRequest.prototype.send 方法
-   *
-   * 在发送请求前记录开始时间，在请求完成（loadend 事件）时计算耗时并上报。
-   *
-   * 设计决策：
-   * - 使用 loadend 事件而非 load/error/abort，因为 loadend 在所有情况下都会触发
-   * - 使用 performance.now() 而非 Date.now()，精度更高（微秒级）
-   */
-  OriginalXHR.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null): void {
-    /* 读取之前在 open 中保存的 url */
-    const url = (this as XMLHttpRequest & { _omnisight_url?: string })._omnisight_url || '';
-    /* 读取之前在 open 中保存的 method */
-    const method = (this as XMLHttpRequest & { _omnisight_method?: string })._omnisight_method || 'GET';
-
-    /* 检查是否是 SDK 自身的上报请求，如果是则跳过采集 */
-    if (isSdkRequest(url, dsn)) {
-      /* 直接调用原始 send，不做任何采集 */
-      originalSend.call(this, body);
-      return;
-    }
-
-    /* 记录请求开始时间（使用高精度计时器） */
-    const startTime = performance.now();
+  if (typeof OriginalXHR === 'function') {
+    /**
+     * 保存原始的 XMLHttpRequest.prototype.open/send 方法引用
+     */
+    originalOpen = OriginalXHR.prototype.open;
+    originalSend = OriginalXHR.prototype.send;
 
     /**
-     * 注册 loadend 事件监听器
-     * loadend 在请求完成时触发（无论成功、失败还是中断）
+     * 重写 XMLHttpRequest.prototype.open 方法
+     *
+     * 透传所有 5 个参数给原始 open 方法，同时保存 method 和 url 到 XHR 实例上，
+     * 供后续 send 方法中使用。
      */
-    this.addEventListener('loadend', () => {
-      /* 计算请求耗时（毫秒） */
-      const duration = performance.now() - startTime;
+    OriginalXHR.prototype.open = function (
+      method: string,                               /* HTTP 方法（GET/POST/PUT/DELETE 等） */
+      url: string | URL,                            /* 请求的目标 URL */
+      async?: boolean,                              /* 是否异步（默认 true） */
+      user?: string | null,                         /* HTTP 认证用户名（可选） */
+      password?: string | null,                     /* HTTP 认证密码（可选） */
+    ): void {
+      /* 将 method 保存到 XHR 实例的自定义属性上，供 send 方法中使用 */
+      (this as XMLHttpRequest & { _omnisight_method?: string })._omnisight_method = method;
+      /* 将 url 转换为字符串并保存，URL 对象需要取 href 属性 */
+      (this as XMLHttpRequest & { _omnisight_url?: string })._omnisight_url =
+        typeof url === 'string' ? url : url.href;
 
-      /* 通过 core.capture() 提交 API 事件 */
-      core.capture({
-        type: 'api',                              /* 事件类型：API 请求 */
-        method,                                   /* HTTP 方法 */
-        apiUrl: url,                              /* 请求目标 URL（使用 apiUrl 避免与 BaseEvent.url 冲突） */
-        status: this.status,                      /* HTTP 响应状态码 */
-        duration: Math.round(duration),           /* 请求耗时（四舍五入到整数毫秒） */
+      /* 调用原始的 open 方法，透传所有参数 */
+      originalOpen!.call(this, method, url, async ?? true, user ?? null, password ?? null);
+    };
+
+    /**
+     * 重写 XMLHttpRequest.prototype.send 方法
+     *
+     * 在发送请求前记录开始时间，在请求完成（loadend 事件）时计算耗时并上报。
+     */
+    OriginalXHR.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null): void {
+      /* 读取之前在 open 中保存的 url */
+      const url = (this as XMLHttpRequest & { _omnisight_url?: string })._omnisight_url || '';
+      /* 读取之前在 open 中保存的 method */
+      const method = (this as XMLHttpRequest & { _omnisight_method?: string })._omnisight_method || 'GET';
+
+      /* 检查是否是 SDK 自身的上报请求，如果是则跳过采集 */
+      if (isSdkRequest(url, dsn)) {
+        /* 直接调用原始 send，不做任何采集 */
+        originalSend!.call(this, body);
+        return;
+      }
+
+      /* 记录请求开始时间（使用高精度计时器） */
+      const startTime = getNow();
+
+      /**
+       * 注册 loadend 事件监听器
+       * loadend 在请求完成时触发（无论成功、失败还是中断）
+       */
+      this.addEventListener('loadend', () => {
+        /* 计算请求耗时（毫秒） */
+        const duration = getNow() - startTime;
+
+        /* 通过 core.capture() 提交 API 事件 */
+        core.capture({
+          type: 'api',                              /* 事件类型：API 请求 */
+          method,                                   /* HTTP 方法 */
+          apiUrl: url,                              /* 请求目标 URL（使用 apiUrl 避免与 BaseEvent.url 冲突） */
+          status: this.status,                      /* HTTP 响应状态码 */
+          duration: Math.round(duration),           /* 请求耗时（四舍五入到整数毫秒） */
+        });
       });
-    });
 
-    /* 调用原始的 send 方法，发送请求 */
-    originalSend.call(this, body);
-  };
+      /* 调用原始的 send 方法，发送请求 */
+      originalSend!.call(this, body);
+    };
+
+    patchedXHR = true;
+  }
 
   /* ---------------------------------------------------------------
    * 2. 劫持 Fetch
@@ -188,7 +198,11 @@ export function initApiCollector(core: Core): () => void {
    * 保存原始的 window.fetch 方法引用
    * 用于在劫持函数中调用原始 fetch，以及在 cleanup 时恢复
    */
-  const originalFetch = window.fetch;
+  const originalFetch =
+    typeof globalWindow.fetch === 'function'
+      ? globalWindow.fetch.bind(globalWindow)
+      : null;
+  let patchedFetch = false;
 
   /**
    * 劫持后的 fetch 方法
@@ -201,68 +215,79 @@ export function initApiCollector(core: Core): () => void {
    * - 在 catch 中也上报事件（status 为 0），记录网络错误
    * - 错误仍然 throw 出去，不影响业务代码的错误处理逻辑
    */
-  window.fetch = async function (
-    input: RequestInfo | URL,                     /* 请求的 URL 或 Request 对象 */
-    init?: RequestInit,                           /* 请求配置（method、headers、body 等） */
-  ): Promise<Response> {
-    /* 从 input 参数中提取 URL 字符串 */
-    const url = extractFetchUrl(input);
+  if (originalFetch) {
+    globalWindow.fetch = (async function (
+      input: RequestInfo | URL,                     /* 请求的 URL 或 Request 对象 */
+      init?: RequestInit,                           /* 请求配置（method、headers、body 等） */
+    ): Promise<Response> {
+      /* 从 input 参数中提取 URL 字符串 */
+      const url = extractFetchUrl(input);
 
-    /* 检查是否是 SDK 自身的上报请求，如果是则直接透传 */
-    if (isSdkRequest(url, dsn)) {
-      return originalFetch.call(window, input, init);
-    }
+      /* 检查是否是 SDK 自身的上报请求，如果是则直接透传 */
+      if (isSdkRequest(url, dsn)) {
+        return originalFetch(input, init);
+      }
 
-    /**
-     * 确定 HTTP 方法
-     * 优先级：init.method > Request 对象的 method > 默认 'GET'
-     */
-    const method =
-      init?.method ||
-      (input instanceof Request ? input.method : 'GET');
+      /**
+       * 确定 HTTP 方法
+       * 优先级：init.method > Request 对象的 method > 默认 'GET'
+       */
+      const method =
+        init?.method ||
+        (typeof Request !== 'undefined' && input instanceof Request ? input.method : 'GET');
 
-    /* 记录请求开始时间 */
-    const startTime = performance.now();
+      /* 记录请求开始时间 */
+      const startTime = getNow();
 
-    try {
-      /* 调用原始 fetch 发送请求 */
-      const response = await originalFetch.call(window, input, init);
+      try {
+        /* 调用原始 fetch 发送请求 */
+        const response = await originalFetch(input, init);
 
-      /* 计算请求耗时 */
-      const duration = performance.now() - startTime;
+        /* 计算请求耗时 */
+        const duration = getNow() - startTime;
 
-      /* 通过 core.capture() 提交 API 事件 */
-      core.capture({
-        type: 'api',                              /* 事件类型：API 请求 */
-        method,                                   /* HTTP 方法 */
-        apiUrl: url,                              /* 请求目标 URL（使用 apiUrl 避免与 BaseEvent.url 冲突） */
-        status: response.status,                  /* HTTP 响应状态码 */
-        duration: Math.round(duration),           /* 请求耗时（四舍五入到整数毫秒） */
-      });
+        /* 通过 core.capture() 提交 API 事件 */
+        core.capture({
+          type: 'api',                              /* 事件类型：API 请求 */
+          method,                                   /* HTTP 方法 */
+          apiUrl: url,                              /* 请求目标 URL（使用 apiUrl 避免与 BaseEvent.url 冲突） */
+          status: response.status,                  /* HTTP 响应状态码 */
+          duration: Math.round(duration),           /* 请求耗时（四舍五入到整数毫秒） */
+        });
 
-      /* 返回原始的 Response 对象，不影响业务代码 */
-      return response;
-    } catch (err) {
-      /* 网络错误（如 DNS 解析失败、CORS 阻止、网络断开等） */
-      const duration = performance.now() - startTime;
+        /* 返回原始的 Response 对象，不影响业务代码 */
+        return response;
+      } catch (err) {
+        /* 网络错误（如 DNS 解析失败、CORS 阻止、网络断开等） */
+        const duration = getNow() - startTime;
 
-      /* 上报网络错误事件，status 设为 0 表示请求未完成 */
-      core.capture({
-        type: 'api',                              /* 事件类型：API 请求 */
-        method,                                   /* HTTP 方法 */
-        apiUrl: url,                              /* 请求目标 URL（使用 apiUrl 避免与 BaseEvent.url 冲突） */
-        status: 0,                                /* 状态码 0 表示网络层错误 */
-        duration: Math.round(duration),           /* 请求耗时 */
-      });
+        /* 上报网络错误事件，status 设为 0 表示请求未完成 */
+        core.capture({
+          type: 'api',                              /* 事件类型：API 请求 */
+          method,                                   /* HTTP 方法 */
+          apiUrl: url,                              /* 请求目标 URL（使用 apiUrl 避免与 BaseEvent.url 冲突） */
+          status: 0,                                /* 状态码 0 表示网络层错误 */
+          duration: Math.round(duration),           /* 请求耗时 */
+        });
 
-      /* 将错误继续抛出，不影响业务代码的错误处理 */
-      throw err;
-    }
-  };
+        /* 将错误继续抛出，不影响业务代码的错误处理 */
+        throw err;
+      }
+    }) as typeof fetch;
+    patchedFetch = true;
+  }
 
   /* 调试模式下输出初始化信息 */
   if (debug) {
-    console.log('[OmniSight] API 采集器已初始化（XHR + Fetch 劫持）');
+    const enabledHooks: string[] = [];
+    if (patchedXHR) enabledHooks.push('XHR');
+    if (patchedFetch) enabledHooks.push('Fetch');
+
+    if (enabledHooks.length > 0) {
+      console.log(`[OmniSight] API 采集器已初始化（${enabledHooks.join(' + ')} 劫持）`);
+    } else {
+      console.warn('[OmniSight] API 采集器初始化跳过：当前环境不支持 XHR/Fetch');
+    }
   }
 
   /* ---------------------------------------------------------------
@@ -275,11 +300,15 @@ export function initApiCollector(core: Core): () => void {
    * 调用时机：SDK 销毁时由 Core.destroy() 统一调用
    */
   return (): void => {
-    /* 恢复 XMLHttpRequest.prototype.open 为原始方法 */
-    OriginalXHR.prototype.open = originalOpen;
-    /* 恢复 XMLHttpRequest.prototype.send 为原始方法 */
-    OriginalXHR.prototype.send = originalSend;
-    /* 恢复 window.fetch 为原始方法 */
-    window.fetch = originalFetch;
+    /* 恢复 XMLHttpRequest.prototype.open/send 为原始方法 */
+    if (patchedXHR && originalOpen && originalSend) {
+      OriginalXHR.prototype.open = originalOpen;
+      OriginalXHR.prototype.send = originalSend;
+    }
+
+    /* 恢复 fetch 为原始方法 */
+    if (patchedFetch && originalFetch) {
+      globalWindow.fetch = originalFetch as typeof fetch;
+    }
   };
 }

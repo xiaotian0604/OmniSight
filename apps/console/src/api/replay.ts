@@ -95,8 +95,30 @@ export interface GetReplayListParams {
  * @returns 录像摘要列表
  */
 export async function getReplayList(params?: GetReplayListParams): Promise<ReplaySession[]> {
-  const { data } = await apiClient.get<ReplaySession[]>('/replay', { params });
-  return data;
+  const { data } = await apiClient.get<
+    Array<{
+      session_id: string;
+      app_id: string;
+      error_count: number;
+      duration: number;
+      created_at: string;
+    }>
+  >('/replay', {
+    params: {
+      from: params?.start,
+      to: params?.end,
+      limit: params?.limit,
+      offset: params?.offset,
+    },
+  });
+
+  return data.map((item) => ({
+    sessionId: item.session_id,
+    appId: item.app_id,
+    errorCount: item.error_count,
+    duration: item.duration,
+    createdAt: item.created_at,
+  }));
 }
 
 /**
@@ -118,6 +140,19 @@ export async function getReplayList(params?: GetReplayListParams): Promise<Repla
  * @returns 包含完整 rrweb 事件数组的录像详情
  */
 export async function getReplayBySessionId(sessionId: string): Promise<ReplayDetail> {
-  const { data } = await apiClient.get<ReplayDetail>(`/replay/${sessionId}`);
-  return data;
+  const { data } = await apiClient.get<{
+    session_id: string;
+    events: unknown[];
+    error_count: number;
+    duration: number;
+    created_at: string;
+  }>(`/replay/${sessionId}`);
+
+  return {
+    sessionId: data.session_id,
+    events: data.events,
+    errorCount: data.error_count,
+    duration: data.duration,
+    createdAt: data.created_at,
+  };
 }

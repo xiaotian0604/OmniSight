@@ -82,8 +82,8 @@ export class ApiKeyGuard implements CanActivate {
      * SDK 在上报时会在 Header 中携带此字段：
      *   headers: { 'x-api-key': 'dev-api-key-omnisight' }
      */
-    const apiKey = request.headers['x-api-key'] as string | undefined;
-    console.log(apiKey,"<==== apiKey")
+    const headerValue = request.headers['x-api-key'];
+    const apiKey = Array.isArray(headerValue) ? headerValue[0] : headerValue;
 
     if (!apiKey) {
       throw new UnauthorizedException(

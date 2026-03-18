@@ -17,7 +17,6 @@ import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import typescript from '@rollup/plugin-typescript';
 import terser from '@rollup/plugin-terser';
-import { RollupOptions } from 'rollup';
 
 const externalDeps = ['rrweb', 'web-vitals'];
 
@@ -38,7 +37,7 @@ const plugins = [
   }),
 ];
 
-const config = {
+const moduleConfig = {
   input: 'src/index.ts',
   output: [
     {
@@ -52,19 +51,21 @@ const config = {
       sourcemap: true,
       exports: 'named',
     },
-    {
-      file: 'dist/omnisight.iife.js',
-      format: 'iife',
-      name: 'OmniSight',
-      sourcemap: true,
-      globals: {
-        'rrweb': 'rrweb',
-        'web-vitals': 'webVitals',
-      },
-    },
   ],
   external: externalDeps,
   plugins,
 };
 
-export default config;
+const iifeConfig = {
+  input: 'src/index.ts',
+  output: {
+    file: 'dist/omnisight.iife.js',
+    format: 'iife',
+    name: 'OmniSight',
+    sourcemap: true,
+    inlineDynamicImports: true,
+  },
+  plugins,
+};
+
+export default [moduleConfig, iifeConfig];

@@ -31,6 +31,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import rrwebPlayer from 'rrweb-player';
 import 'rrweb-player/dist/style.css';
 
+interface RrwebPlayerInstance {
+  getReplayer?: () => {
+    play: (time?: number) => void;
+    pause: (time?: number) => void;
+    setConfig: (config: { speed: number }) => void;
+    getCurrentTime?: () => number;
+  };
+  $destroy?: () => void;
+}
+
 /**
  * Player 组件的 Props 类型
  */
@@ -79,7 +89,7 @@ export function Player({ events, speed, isPlaying, seekTo, onTimeUpdate }: Playe
   const containerRef = useRef<HTMLDivElement>(null);
 
   /** rrweb-player 实例引用 */
-  const playerRef = useRef<rrwebPlayer | null>(null);
+  const playerRef = useRef<RrwebPlayerInstance | null>(null);
 
   /** 记录录像的起始时间戳，用于计算相对播放时间 */
   const startTimeRef = useRef<number>(0);
@@ -133,7 +143,7 @@ export function Player({ events, speed, isPlaying, seekTo, onTimeUpdate }: Playe
     return () => {
       if (playerRef.current) {
         try {
-          playerRef.current.$destroy();
+          playerRef.current.$destroy?.();
         } catch {
           /* 忽略销毁时的错误 */
         }

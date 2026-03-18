@@ -101,10 +101,15 @@ export interface MetricsQueryParams {
  * @returns 错误率时序数据点数组，value 为百分比（0-100）
  */
 export async function getErrorRateSeries(params: MetricsQueryParams): Promise<TimeSeriesPoint[]> {
-  const { data } = await apiClient.get<TimeSeriesPoint[]>('/metrics/error-rate', {
+  const { data } = await apiClient.get<
+    Array<{ bucket: string; error_rate: number | string }>
+  >('/metrics/error-rate', {
     params: { from: params.start, to: params.end, interval: params.interval },
   });
-  return data;
+  return data.map((item) => ({
+    time: item.bucket,
+    value: Number(item.error_rate),
+  }));
 }
 
 /**
@@ -127,10 +132,27 @@ export async function getErrorRateSeries(params: MetricsQueryParams): Promise<Ti
  * @returns 接口耗时统计数组，按 P99 降序排列
  */
 export async function getApiMetrics(params: MetricsQueryParams): Promise<ApiMetricItem[]> {
-  const { data } = await apiClient.get<ApiMetricItem[]>('/metrics/api', {
+  const { data } = await apiClient.get<
+    Array<{
+      endpoint: string;
+      method?: string;
+      p50: number | string;
+      p75: number | string;
+      p99: number | string;
+      count: number | string;
+      errorRate: number | string;
+    }>
+  >('/metrics/api', {
     params: { from: params.start, to: params.end },
   });
-  return data;
+  return data.map((item) => ({
+    endpoint: item.method ? `${item.method} ${item.endpoint}` : item.endpoint,
+    p50: Number(item.p50),
+    p75: Number(item.p75),
+    p99: Number(item.p99),
+    count: Number(item.count),
+    errorRate: Number(item.errorRate),
+  }));
 }
 
 /**
@@ -150,8 +172,41 @@ export async function getApiMetrics(params: MetricsQueryParams): Promise<ApiMetr
  * @returns 包含四项 Vital 指标时序数据的对象
  */
 export async function getVitalsSeries(params: MetricsQueryParams): Promise<VitalsSeriesData> {
-  const { data } = await apiClient.get<VitalsSeriesData>('/metrics/vitals', {
+  const { data } = await apiClient.get<
+    Array<{ bucket: string; name: string; avg_value: number | string }>
+  >('/metrics/vitals', {
     params: { from: params.start, to: params.end, interval: params.interval },
   });
-  return data;
+  const series: VitalsSeriesData = {
+    lcp: [],
+    cls: [],
+    ttfb: [],
+    inp: [],
+  };
+
+  data.forEach((item) => {
+    const point = {
+      time: item.bucket,
+      value: Number(item.avg_value),
+    };
+
+    switch (item.name) {
+      case 'LCP':
+        series.lcp.push(point);
+        break;
+      case 'CLS':
+        series.cls.push(point);
+        break;
+      case 'TTFB':
+        series.ttfb.push(point);
+        break;
+      case 'INP':
+        series.inp.push(point);
+        break;
+      default:
+        break;
+    }
+  });
+
+  return series;
 }

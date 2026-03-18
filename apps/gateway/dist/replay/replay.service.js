@@ -21,8 +21,10 @@ let ReplayService = class ReplayService {
         this.pg = pg;
     }
     async save(sessionId, appId, events, errorCount = 1) {
-        const duration = events.length > 1
-            ? events[events.length - 1].timestamp - events[0].timestamp
+        const firstTimestamp = this.getEventTimestamp(events[0]);
+        const lastTimestamp = this.getEventTimestamp(events[events.length - 1]);
+        const duration = firstTimestamp !== null && lastTimestamp !== null && lastTimestamp >= firstTimestamp
+            ? lastTimestamp - firstTimestamp
             : 0;
         const result = await this.pg.query(`INSERT INTO replay_sessions (session_id, app_id, events, error_count, duration)
        VALUES ($1, $2, $3::jsonb, $4, $5)
@@ -40,13 +42,27 @@ let ReplayService = class ReplayService {
         }
         return result.rows[0];
     }
-    async list(appId, limit = 20, offset = 0) {
+    async list(appId, limit = 20, offset = 0, from, to) {
+        const params = [appId, limit, offset];
+        const filters = ['app_id = $1'];
+        if (from) {
+            params.push(from);
+            filters.push(`created_at >= $${params.length}::timestamptz`);
+        }
+        if (to) {
+            params.push(to);
+            filters.push(`created_at <= $${params.length}::timestamptz`);
+        }
         const result = await this.pg.query(`SELECT session_id, app_id, error_count, duration, created_at
        FROM replay_sessions
-       WHERE app_id = $1
+       WHERE ${filters.join(' AND ')}
        ORDER BY created_at DESC
-       LIMIT $2 OFFSET $3`, [appId, limit, offset]);
+       LIMIT $2 OFFSET $3`, params);
         return result.rows;
+    }
+    getEventTimestamp(event) {
+        const timestamp = event?.timestamp;
+        return typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : null;
     }
 };
 exports.ReplayService = ReplayService;

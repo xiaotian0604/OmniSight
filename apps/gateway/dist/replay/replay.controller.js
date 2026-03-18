@@ -18,6 +18,20 @@ const swagger_1 = require("@nestjs/swagger");
 const replay_service_1 = require("./replay.service");
 const replay_dto_1 = require("./replay.dto");
 const api_key_guard_1 = require("../auth/api-key.guard");
+function parsePositiveInt(value, fallback, max) {
+    const parsed = Number.parseInt(value ?? '', 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return fallback;
+    }
+    return Math.min(parsed, max);
+}
+function parseNonNegativeInt(value, fallback) {
+    const parsed = Number.parseInt(value ?? '', 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        return fallback;
+    }
+    return parsed;
+}
 let ReplayController = class ReplayController {
     constructor(replayService) {
         this.replayService = replayService;
@@ -32,8 +46,8 @@ let ReplayController = class ReplayController {
     async getReplay(sessionId) {
         return this.replayService.getBySessionId(sessionId);
     }
-    async listReplays(appId, limit, offset) {
-        return this.replayService.list(appId, limit ? parseInt(limit, 10) : 20, offset ? parseInt(offset, 10) : 0);
+    async listReplays(appId, from, to, limit, offset) {
+        return this.replayService.list(appId, parsePositiveInt(limit, 20, 200), parseNonNegativeInt(offset, 0), from, to);
     }
 };
 exports.ReplayController = ReplayController;
@@ -92,10 +106,12 @@ __decorate([
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: '返回录像列表' }),
     __param(0, (0, common_1.Query)('appId')),
-    __param(1, (0, common_1.Query)('limit')),
-    __param(2, (0, common_1.Query)('offset')),
+    __param(1, (0, common_1.Query)('from')),
+    __param(2, (0, common_1.Query)('to')),
+    __param(3, (0, common_1.Query)('limit')),
+    __param(4, (0, common_1.Query)('offset')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], ReplayController.prototype, "listReplays", null);
 exports.ReplayController = ReplayController = __decorate([

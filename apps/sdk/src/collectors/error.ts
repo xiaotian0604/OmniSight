@@ -34,6 +34,11 @@ import type { Core } from '../core';
  * @returns {() => void} cleanup 函数，调用后移除所有错误监听
  */
 export function initErrorCollector(core: Core): () => void {
+  /* 非浏览器环境（SSR/Node）下直接返回空 cleanup，避免访问 window 报错 */
+  if (typeof window === 'undefined') {
+    return (): void => {};
+  }
+
   /* ---------------------------------------------------------------
    * 1. 监听 window error 事件 — 捕获同步运行时错误
    * --------------------------------------------------------------- */

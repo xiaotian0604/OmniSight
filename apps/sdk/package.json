@@ -37,7 +37,9 @@
     "@rollup/plugin-terser": "^0.4.0",
     "tslib": "^2.8.0",
     "typescript": "^5.0.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "rrweb": "^2.0.0-alpha.18",
+    "web-vitals": "^4.2.4"
   },
   "peerDependencies": {
     "rrweb": "^2.0.0-alpha.0",

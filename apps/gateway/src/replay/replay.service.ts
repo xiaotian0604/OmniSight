@@ -56,7 +56,7 @@ export class ReplayService {
   async save(
     sessionId: string,
     appId: string,
-    events: any[],
+    events: unknown[],
     errorCount: number = 1,
   ) {
     /**
@@ -64,9 +64,11 @@ export class ReplayService {
      * rrweb 事件的 timestamp 字段是毫秒级时间戳
      * 用最后一个事件的时间减去第一个事件的时间得到总时长
      */
+    const firstTimestamp = this.getEventTimestamp(events[0]);
+    const lastTimestamp = this.getEventTimestamp(events[events.length - 1]);
     const duration =
-      events.length > 1
-        ? events[events.length - 1].timestamp - events[0].timestamp
+      firstTimestamp !== null && lastTimestamp !== null && lastTimestamp >= firstTimestamp
+        ? lastTimestamp - firstTimestamp
         : 0;
 
     const result = await this.pg.query(
@@ -126,16 +128,40 @@ export class ReplayService {
    *   注意：列表接口不返回 events 字段（JSONB 数据量大），
    *   只有进入回放页面时才通过 getBySessionId 获取完整事件数据
    */
-  async list(appId: string, limit: number = 20, offset: number = 0) {
+  async list(
+    appId: string,
+    limit: number = 20,
+    offset: number = 0,
+    from?: string,
+    to?: string,
+  ) {
+    const params: Array<string | number> = [appId, limit, offset];
+    const filters: string[] = ['app_id = $1'];
+
+    if (from) {
+      params.push(from);
+      filters.push(`created_at >= $${params.length}::timestamptz`);
+    }
+
+    if (to) {
+      params.push(to);
+      filters.push(`created_at <= $${params.length}::timestamptz`);
+    }
+
     const result = await this.pg.query(
       `SELECT session_id, app_id, error_count, duration, created_at
        FROM replay_sessions
-       WHERE app_id = $1
+       WHERE ${filters.join(' AND ')}
        ORDER BY created_at DESC
        LIMIT $2 OFFSET $3`,
-      [appId, limit, offset],
+      params,
     );
 
     return result.rows;
+  }
+
+  private getEventTimestamp(event: unknown): number | null {
+    const timestamp = (event as { timestamp?: unknown } | undefined)?.timestamp;
+    return typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : null;
   }
 }

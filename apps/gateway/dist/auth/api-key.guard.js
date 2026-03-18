@@ -29,8 +29,8 @@ let ApiKeyGuard = class ApiKeyGuard {
     }
     async canActivate(context) {
         const request = context.switchToHttp().getRequest();
-        const apiKey = request.headers['x-api-key'];
-        console.log(apiKey, "<==== apiKey");
+        const headerValue = request.headers['x-api-key'];
+        const apiKey = Array.isArray(headerValue) ? headerValue[0] : headerValue;
         if (!apiKey) {
             throw new common_1.UnauthorizedException('缺少 x-api-key Header !!，请在 SDK init 时配置正确的 apiKey');
         }

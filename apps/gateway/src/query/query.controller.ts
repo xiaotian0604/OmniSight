@@ -29,6 +29,26 @@ import {
 } from '@nestjs/swagger';
 import { QueryService } from './query.service';
 
+function parsePositiveInt(value: string | undefined, fallback: number, max: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.min(parsed, max);
+}
+
+function parseNonNegativeInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function parseErrorSort(value: string | undefined): 'count' | 'lastSeen' {
+  return value === 'lastSeen' ? 'lastSeen' : 'count';
+}
+
 @ApiTags('数据查询')
 @Controller('v1')
 export class QueryController {
@@ -110,12 +130,16 @@ export class QueryController {
     @Query('from') from: string,
     @Query('to') to: string,
     @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.queryService.getErrorsGrouped(
       appId,
       from,
       to,
-      limit ? parseInt(limit, 10) : 50,
+      parsePositiveInt(limit, 50, 200),
+      parseErrorSort(sort),
+      parseNonNegativeInt(offset, 0),
     );
   }
 
@@ -144,8 +168,11 @@ export class QueryController {
     description: '事件 ID（UUID）',
   })
   @ApiResponse({ status: 200, description: '返回错误详情' })
-  async getErrorById(@Param('id') id: string) {
-    return this.queryService.getErrorById(id);
+  async getErrorById(
+    @Param('id') id: string,
+    @Query('appId') appId?: string,
+  ) {
+    return this.queryService.getErrorDetail(id, appId);
   }
 
   /**
@@ -255,7 +282,7 @@ export class QueryController {
       appId,
       from,
       to,
-      limit ? parseInt(limit, 10) : 20,
+      parsePositiveInt(limit, 20, 200),
     );
   }
 

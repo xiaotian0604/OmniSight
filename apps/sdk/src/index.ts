@@ -74,9 +74,6 @@ import { initReplayCollector } from './collectors/replay';
 import { getSessionId, resetSession } from './session';
 /* 用户 ID 匿名化：SHA-256 单向哈希 */
 import { anonymizeUserId } from './privacy/anonymize';
-/* Beacon API 封装 */
-import { sendViaBeacon } from './transport/beacon';
-
 /* ---------------------------------------------------------------
  * 模块级状态
  * --------------------------------------------------------------- */
@@ -154,6 +151,13 @@ export function init(config: OmniSightConfig & { userId?: string }): void {
      * @param {unknown[]} events - rrweb 录制的事件数组
      */
     core.uploadReplay = (events: unknown[]): void => {
+      if (events.length === 0) {
+        if (core.getConfig().debug) {
+          console.warn('[OmniSight] 跳过空 replay 上传');
+        }
+        return;
+      }
+
       /* 构建上传数据：包含 sessionId 和录像事件 */
       const payload = JSON.stringify({
         sessionId: getSessionId(),                 /* 当前会话 ID */

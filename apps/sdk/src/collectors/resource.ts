@@ -32,6 +32,11 @@ import type { Core } from '../core';
  * @returns {() => void} cleanup 函数，调用后断开 PerformanceObserver
  */
 export function initResourceCollector(core: Core): () => void {
+  /* 非浏览器环境或不支持 PerformanceObserver 时直接跳过 */
+  if (typeof window === 'undefined' || typeof PerformanceObserver === 'undefined') {
+    return (): void => {};
+  }
+
   /* 获取 SDK 配置中的数据上报地址，用于过滤 SDK 自身请求 */
   const dsn = core.getConfig().dsn;
   /* 获取调试模式标志 */

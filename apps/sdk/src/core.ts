@@ -235,8 +235,6 @@ export class Core {
       debug: config.debug ?? false,                  /* 默认不开启调试模式 */
     };
 
-    console.log(this.config.apiKey,"<=-== apiKey")
-
     /* 初始化采样器，传入配置的采样率 */
     this.sampler = new Sampler(this.config.sampleRate);
 

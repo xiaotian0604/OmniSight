@@ -39,6 +39,22 @@ import { ReplayService } from './replay.service';
 import { UploadReplayDto } from './replay.dto';
 import { ApiKeyGuard } from '../auth/api-key.guard';
 
+function parsePositiveInt(value: string | undefined, fallback: number, max: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.min(parsed, max);
+}
+
+function parseNonNegativeInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
 @ApiTags('录像回放')
 @Controller('v1/replay')
 export class ReplayController {
@@ -163,13 +179,17 @@ export class ReplayController {
   @ApiResponse({ status: 200, description: '返回录像列表' })
   async listReplays(
     @Query('appId') appId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
     return this.replayService.list(
       appId,
-      limit ? parseInt(limit, 10) : 20,
-      offset ? parseInt(offset, 10) : 0,
+      parsePositiveInt(limit, 20, 200),
+      parseNonNegativeInt(offset, 0),
+      from,
+      to,
     );
   }
 }

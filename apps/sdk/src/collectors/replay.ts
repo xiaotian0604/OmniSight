@@ -51,6 +51,37 @@ interface BufferedEvent {
   ts: number;
 }
 
+interface RrwebRecorderModule {
+  record: (options: {
+    emit: (event: unknown) => void;
+    maskInputOptions: unknown;
+    blockSelector: string;
+  }) => () => void;
+}
+
+function resolveRrwebModule(): Promise<RrwebRecorderModule> {
+  const maybeGlobal = (globalThis as typeof globalThis & {
+    rrweb?: Partial<RrwebRecorderModule>;
+  }).rrweb;
+
+  if (maybeGlobal && typeof maybeGlobal.record === 'function') {
+    return Promise.resolve(maybeGlobal as RrwebRecorderModule);
+  }
+
+  return import('rrweb').then((module) => {
+    if (typeof module.record === 'function') {
+      return module as RrwebRecorderModule;
+    }
+
+    const maybeDefault = (module as { default?: Partial<RrwebRecorderModule> }).default;
+    if (maybeDefault && typeof maybeDefault.record === 'function') {
+      return maybeDefault as RrwebRecorderModule;
+    }
+
+    throw new Error('rrweb.record is not available');
+  });
+}
+
 /**
  * 初始化用户操作录制采集器
  *
@@ -61,6 +92,10 @@ interface BufferedEvent {
  * @returns {() => void} cleanup 函数，调用后停止录制并清理定时器
  */
 export function initReplayCollector(core: Core): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return (): void => {};
+  }
+
   /* 获取调试模式标志 */
   const debug = core.getConfig().debug;
   /* 获取隐私配置 */
@@ -86,10 +121,62 @@ export function initReplayCollector(core: Core): () => void {
   let errorTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
+   * 录制器是否已经真正启动
+   * 用于避免在 rrweb 还没 ready 时就上传空数组
+   */
+  let recorderReady = false;
+
+  /**
+   * 是否已经收到过至少一个 rrweb 事件
+   * 如果连首帧都没有，就不应该上传 replay
+   */
+  let hasRecordedEvents = false;
+
+  /**
+   * 错误是否发生在录制器 ready 之前
+   * 若是，则等 rrweb 开始吐事件后再进入上传窗口
+   */
+  let pendingErrorBeforeReady = false;
+
+  /**
    * rrweb 停止录制的函数引用
    * rrweb.record() 返回一个 stop 函数，调用后停止录制
    */
   let stopRecording: (() => void) | null | undefined = null;
+
+  const startUploadWindow = (): void => {
+    if (errorTriggered) {
+      return;
+    }
+
+    errorTriggered = true;
+
+    if (debug) {
+      console.log(`[OmniSight] 错误触发录像上传，将在 ${AFTER_ERROR_DURATION_MS}ms 后上传`);
+    }
+
+    errorTimer = setTimeout(() => {
+      errorTimer = null;
+
+      const snapshot = eventBuffer.map((item) => item.event);
+
+      if (snapshot.length === 0) {
+        if (debug) {
+          console.warn('[OmniSight] 跳过空录像上传：当前错误窗口内没有任何 rrweb 事件');
+        }
+        errorTriggered = false;
+        return;
+      }
+
+      if (debug) {
+        console.log(`[OmniSight] 正在上传录像，共 ${snapshot.length} 个事件`);
+      }
+
+      core.uploadReplay(snapshot);
+      eventBuffer.length = 0;
+      errorTriggered = false;
+    }, AFTER_ERROR_DURATION_MS);
+  };
 
   /**
    * 动态导入 rrweb 并启动录制
@@ -104,7 +191,7 @@ export function initReplayCollector(core: Core): () => void {
        * 如果用户没有安装 rrweb，这里会抛出 import 错误，
        * 被外层 catch 捕获后静默处理
        */
-      const rrweb = await import('rrweb');
+      const rrweb = await resolveRrwebModule();
 
       /**
        * 获取 rrweb 的隐私脱敏配置
@@ -130,6 +217,9 @@ export function initReplayCollector(core: Core): () => void {
          * @param {unknown} event - rrweb 录制的事件对象
          */
         emit(event: unknown) {
+          recorderReady = true;
+          hasRecordedEvents = true;
+
           /* 获取当前时间戳 */
           const now = Date.now();
 
@@ -150,6 +240,11 @@ export function initReplayCollector(core: Core): () => void {
           const cutoff = now - BUFFER_DURATION_MS;
           while (eventBuffer.length > 0 && eventBuffer[0].ts < cutoff) {
             eventBuffer.shift();
+          }
+
+          if (pendingErrorBeforeReady && !errorTriggered) {
+            pendingErrorBeforeReady = false;
+            startUploadWindow();
           }
         },
         /* 输入框遮盖配置：密码框、邮箱框等敏感输入会被遮盖 */
@@ -195,53 +290,15 @@ export function initReplayCollector(core: Core): () => void {
    * 新的错误不会重复触发，避免频繁上传。
    */
   const onError = (): void => {
-    /* 如果已经有错误触发了上传流程，跳过 */
-    if (errorTriggered) {
+    if (!recorderReady || !hasRecordedEvents) {
+      pendingErrorBeforeReady = true;
+      if (debug) {
+        console.warn('[OmniSight] 错误发生时 rrweb 尚未准备完成，等待首个录制事件后再启动上传窗口');
+      }
       return;
     }
 
-    /* 标记错误已触发，防止重复触发 */
-    errorTriggered = true;
-
-    /* 调试模式下输出触发信息 */
-    if (debug) {
-      console.log(`[OmniSight] 错误触发录像上传，将在 ${AFTER_ERROR_DURATION_MS}ms 后上传`);
-    }
-
-    /**
-     * 设置 10 秒后上传录像
-     * 这 10 秒内继续录制，收集用户对错误的反应
-     */
-    errorTimer = setTimeout(() => {
-      /* 清空定时器引用 */
-      errorTimer = null;
-
-      /**
-       * 提取 Ring Buffer 中所有事件的原始 rrweb 事件对象
-       * 使用 map 只提取 event 字段，丢弃时间戳（rrweb 事件内部已有时间信息）
-       */
-      const snapshot = eventBuffer.map((item) => item.event);
-
-      /* 调试模式下输出上传信息 */
-      if (debug) {
-        console.log(`[OmniSight] 正在上传录像，共 ${snapshot.length} 个事件`);
-      }
-
-      /**
-       * 调用 Core 的 uploadReplay 方法上传录像数据
-       * uploadReplay 的具体实现由 index.ts 在初始化时注入
-       */
-      core.uploadReplay(snapshot);
-
-      /**
-       * 清空 Ring Buffer
-       * 使用 length = 0 而非重新赋值，保持数组引用不变
-       */
-      eventBuffer.length = 0;
-
-      /* 重置错误触发标志，允许下一次错误触发新的上传 */
-      errorTriggered = false;
-    }, AFTER_ERROR_DURATION_MS);
+    startUploadWindow();
   };
 
   /* 在 Core 上注册错误事件回调 */
@@ -277,5 +334,8 @@ export function initReplayCollector(core: Core): () => void {
 
     /* 重置错误触发标志 */
     errorTriggered = false;
+    recorderReady = false;
+    hasRecordedEvents = false;
+    pendingErrorBeforeReady = false;
   };
 }

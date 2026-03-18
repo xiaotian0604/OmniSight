@@ -16,6 +16,23 @@ exports.QueryController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const query_service_1 = require("./query.service");
+function parsePositiveInt(value, fallback, max) {
+    const parsed = Number.parseInt(value ?? '', 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return fallback;
+    }
+    return Math.min(parsed, max);
+}
+function parseNonNegativeInt(value, fallback) {
+    const parsed = Number.parseInt(value ?? '', 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+        return fallback;
+    }
+    return parsed;
+}
+function parseErrorSort(value) {
+    return value === 'lastSeen' ? 'lastSeen' : 'count';
+}
 let QueryController = class QueryController {
     constructor(queryService) {
         this.queryService = queryService;
@@ -23,17 +40,17 @@ let QueryController = class QueryController {
     async getApps() {
         return this.queryService.getAppsList();
     }
-    async getErrors(appId, from, to, limit) {
-        return this.queryService.getErrorsGrouped(appId, from, to, limit ? parseInt(limit, 10) : 50);
+    async getErrors(appId, from, to, limit, offset, sort) {
+        return this.queryService.getErrorsGrouped(appId, from, to, parsePositiveInt(limit, 50, 200), parseErrorSort(sort), parseNonNegativeInt(offset, 0));
     }
-    async getErrorById(id) {
-        return this.queryService.getErrorById(id);
+    async getErrorById(id, appId) {
+        return this.queryService.getErrorDetail(id, appId);
     }
     async getErrorRate(appId, from, to, interval) {
         return this.queryService.getErrorRateSeries(appId, from, to, interval || '5 minutes');
     }
     async getApiMetrics(appId, from, to, limit) {
-        return this.queryService.getApiMetrics(appId, from, to, limit ? parseInt(limit, 10) : 20);
+        return this.queryService.getApiMetrics(appId, from, to, parsePositiveInt(limit, 20, 200));
     }
     async getVitals(appId, from, to, name, interval) {
         return this.queryService.getVitalsSeries(appId, from, to, name, interval || '1 hour');
@@ -83,8 +100,10 @@ __decorate([
     __param(1, (0, common_1.Query)('from')),
     __param(2, (0, common_1.Query)('to')),
     __param(3, (0, common_1.Query)('limit')),
+    __param(4, (0, common_1.Query)('offset')),
+    __param(5, (0, common_1.Query)('sort')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], QueryController.prototype, "getErrors", null);
 __decorate([
@@ -99,8 +118,9 @@ __decorate([
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: '返回错误详情' }),
     __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Query)('appId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], QueryController.prototype, "getErrorById", null);
 __decorate([
