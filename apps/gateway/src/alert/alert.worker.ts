@@ -110,6 +110,7 @@ export class AlertWorker {
         `告警扫描完成: 耗时 ${duration}ms, ` +
           `检测到 ${result.scanResult?.errors.length || 0} 个高频错误, ` +
           `发送 ${result.sentCount} 条告警, ` +
+          `失败 ${result.failedCount} 条, ` +
           `跳过 ${result.skippedCount} 条`,
       );
     } catch (error) {
@@ -129,6 +130,7 @@ export class AlertWorker {
   async triggerManualScan(): Promise<{
     errors: number;
     sent: number;
+    failed: number;
     skipped: number;
   }> {
     this.logger.log('手动触发告警扫描');
@@ -138,6 +140,7 @@ export class AlertWorker {
     return {
       errors: result.scanResult?.errors.length || 0,
       sent: result.sentCount,
+      failed: result.failedCount,
       skipped: result.skippedCount,
     };
   }

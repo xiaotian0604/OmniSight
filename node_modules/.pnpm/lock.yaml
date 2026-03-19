@@ -66,6 +66,9 @@ importers:
 
   apps/gateway:
     dependencies:
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.31
+        version: 0.3.31
       '@nestjs/bull':
         specifier: ^10.1.0
         version: 10.2.3(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@10.4.22)(reflect-metadata@0.2.2)(rxjs@7.8.2))(bull@4.16.5)
@@ -130,12 +133,6 @@ importers:
       '@omnisight/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
-      rrweb:
-        specifier: ^2.0.0-alpha.0
-        version: 2.0.0-alpha.4
-      web-vitals:
-        specifier: ^4.0.0
-        version: 4.2.4
     devDependencies:
       '@rollup/plugin-commonjs':
         specifier: ^28.0.0
@@ -152,6 +149,9 @@ importers:
       rollup:
         specifier: ^4.28.0
         version: 4.59.0
+      rrweb:
+        specifier: ^2.0.0-alpha.18
+        version: 2.0.0-alpha.20
       tslib:
         specifier: ^2.8.0
         version: 2.8.1
@@ -161,6 +161,9 @@ importers:
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.37)(terser@5.46.0)
+      web-vitals:
+        specifier: ^4.2.4
+        version: 4.2.4
 
   packages/shared-types:
     devDependencies:
@@ -2450,9 +2453,6 @@ packages:
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
 
-  rrdom@0.1.7:
-    resolution: {integrity: sha512-ZLd8f14z9pUy2Hk9y636cNv5Y2BMnNEY99wxzW9tD2BLDfe1xFxtLjB4q/xCBYo6HRe0wofzKzjm4JojmpBfFw==, tarball: https://registry.npmmirror.com/rrdom/-/rrdom-0.1.7.tgz}
-
   rrdom@2.0.0-alpha.20:
     resolution: {integrity: sha512-hoqjS4662LtBp82qEz9GrqU36UpEmCvTA2Hns3qdF7cklLFFy3G+0Th8hLytJENleHHWxsB5nWJ3eXz5mSRxdQ==, tarball: https://registry.npmmirror.com/rrdom/-/rrdom-2.0.0-alpha.20.tgz}
 
@@ -2462,14 +2462,8 @@ packages:
   rrweb-snapshot@2.0.0-alpha.20:
     resolution: {integrity: sha512-YTNf9YVeaGRo/jxY3FKBge2c/Ojd/KTHmuWloUSB+oyPXuY73ZeeG873qMMmhIpqEn7hn7aBF1eWEQmP7wjf8A==, tarball: https://registry.npmmirror.com/rrweb-snapshot/-/rrweb-snapshot-2.0.0-alpha.20.tgz}
 
-  rrweb-snapshot@2.0.0-alpha.4:
-    resolution: {integrity: sha512-KQ2OtPpXO5jLYqg1OnXS/Hf+EzqnZyP5A+XPqBCjYpj3XIje/Od4gdUwjbFo3cVuWq5Cw5Y1d3/xwgIS7/XpQQ==, tarball: https://registry.npmmirror.com/rrweb-snapshot/-/rrweb-snapshot-2.0.0-alpha.4.tgz}
-
   rrweb@2.0.0-alpha.20:
     resolution: {integrity: sha512-CZKDlm+j1VA50Ko3gnMbpvguCAleljsTNXPnVk9aeNP8o6T6kolRbISHyDZpqZ4G+bdDLlQOignPP3jEsXs8Gg==, tarball: https://registry.npmmirror.com/rrweb/-/rrweb-2.0.0-alpha.20.tgz}
-
-  rrweb@2.0.0-alpha.4:
-    resolution: {integrity: sha512-wEHUILbxDPcNwkM3m4qgPgXAiBJyqCbbOHyVoNEVBJzHszWEFYyTbrZqUdeb1EfmTRC2PsumCIkVcomJ/xcOzA==, tarball: https://registry.npmmirror.com/rrweb/-/rrweb-2.0.0-alpha.4.tgz}
 
   run-async@2.4.1:
     resolution: {integrity: sha512-tvVnVv01b8c1RrA6Ep7JkStj85Guv/YrMcwqYQnwjsAS2cTmmPGBBjAjpCW7RrSodNSoE2/qg9O4bceNvUuDgQ==, tarball: https://registry.npmmirror.com/run-async/-/run-async-2.4.1.tgz}
@@ -5236,10 +5230,6 @@ snapshots:
       '@rollup/rollup-win32-x64-msvc': 4.59.0
       fsevents: 2.3.3
 
-  rrdom@0.1.7:
-    dependencies:
-      rrweb-snapshot: 2.0.0-alpha.4
-
   rrdom@2.0.0-alpha.20:
     dependencies:
       rrweb-snapshot: 2.0.0-alpha.20
@@ -5254,8 +5244,6 @@ snapshots:
     dependencies:
       postcss: 8.5.8
 
-  rrweb-snapshot@2.0.0-alpha.4: {}
-
   rrweb@2.0.0-alpha.20:
     dependencies:
       '@rrweb/types': 2.0.0-alpha.20
@@ -5266,17 +5254,6 @@ snapshots:
       mitt: 3.0.1
       rrdom: 2.0.0-alpha.20
       rrweb-snapshot: 2.0.0-alpha.20
-
-  rrweb@2.0.0-alpha.4:
-    dependencies:
-      '@rrweb/types': 2.0.0-alpha.20
-      '@types/css-font-loading-module': 0.0.7
-      '@xstate/fsm': 1.6.5
-      base64-arraybuffer: 1.0.2
-      fflate: 0.4.8
-      mitt: 3.0.1
-      rrdom: 0.1.7
-      rrweb-snapshot: 2.0.0-alpha.4
 
   run-async@2.4.1: {}
 

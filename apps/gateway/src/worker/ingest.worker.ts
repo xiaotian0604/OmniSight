@@ -19,11 +19,14 @@
  * - 可以通过调整 Worker 并发数来控制数据库写入压力
  *
  * 去重策略：
- * 使用 Redis SET 命令（带 EX 过期时间）模拟布隆过滤器：
- * - Key 格式：dedup:{appId}:{fingerprint}
- * - 如果 SET NX 返回 null（key 已存在），说明是重复事件，跳过
- * - 如果 SET NX 返回 OK（key 不存在），说明是新事件，继续处理
- * - TTL 设为 3600 秒（1 小时），1 小时后允许相同指纹的事件再次入库
+ * 使用 Redis SET 命令（带 EX 过期时间）做"同一事件重投"保护：
+ * - Key 格式：dedup:{appId}:{sessionId}:{type}:{fingerprint}:{ts}:{occurrences}
+ * - 只去掉完全相同的事件，避免网络重试/队列重复消费导致重复入库
+ * - 不再按 fingerprint 粗粒度吞掉真实重复错误，否则会直接破坏：
+ *   1. 错误次数统计
+ *   2. 影响用户数统计
+ *   3. 高频错误告警的真实计数
+ * - TTL 设为 3600 秒（1 小时），足够覆盖重试窗口
  *
  * 为什么用 Redis SET 而不是真正的布隆过滤器？
  * - Redis 的 BF.ADD/BF.EXISTS 需要 RedisBloom 模块，增加部署复杂度
@@ -42,14 +45,14 @@ import { PG_POOL, REDIS } from '../database.module';
 
 /**
  * Redis 去重 key 前缀
- * 完整 key 格式：dedup:{appId}:{fingerprint}
+ * 完整 key 格式：dedup:{appId}:{sessionId}:{type}:{fingerprint}:{ts}:{occurrences}
  */
 const DEDUP_PREFIX = 'dedup:';
 
 /**
  * 去重 key 的过期时间（秒）
  * 1 小时 = 3600 秒
- * 1 小时内相同 appId + fingerprint 的事件只会入库一次
+ * 1 小时内完全相同的事件只会入库一次
  */
 const DEDUP_TTL_SECONDS = 3600;
 
@@ -110,16 +113,16 @@ export class IngestWorker {
       /**
        * 步骤 1：去重检查
        *
-       * 只对有 fingerprint 的事件进行去重（主要是 error 类型）
-       * api/vital/resource 等类型通常没有 fingerprint，直接入库
+       * 只对具备稳定事件标识的信息做去重。
+       * 这里的目标是拦截"同一条事件被重复投递"，而不是压掉真实发生的多次错误。
        *
        * Redis SET 命令参数说明：
        * - NX: 仅当 key 不存在时才设置（Not eXists）
        * - EX: 设置过期时间（秒）
        * - 返回值：成功设置返回 'OK'，key 已存在返回 null
        */
-      if (event.fingerprint) {
-        const dedupKey = `${DEDUP_PREFIX}${event.appId}:${event.fingerprint}`;
+      const dedupKey = this.buildDedupKey(event);
+      if (dedupKey) {
         const setResult = await this.redis.set(
           dedupKey,
           '1',
@@ -130,7 +133,7 @@ export class IngestWorker {
 
         if (setResult === null) {
           /**
-           * key 已存在，说明 1 小时内已有相同指纹的事件入库
+           * key 已存在，说明同一条事件已经被处理过
            * 跳过此事件，避免重复数据
            */
           dedupCount++;
@@ -226,5 +229,45 @@ export class IngestWorker {
      */
 
     return event;
+  }
+
+  /**
+   * 构造事件级去重 key
+   *
+   * 设计原则：
+   * - 使用事件本身的稳定身份字段，而不是仅用 fingerprint
+   * - 同一错误在不同时间、不同 session 中重复发生时，应该保留计数
+   * - 只有"同一条事件被重复投递"时才应被压掉
+   *
+   * @param event - 原始事件
+   * @returns Redis 去重 key；如果关键字段缺失则返回 null，不执行服务端去重
+   */
+  private buildDedupKey(event: {
+    appId?: string;
+    sessionId?: string;
+    type?: string;
+    fingerprint?: string;
+    ts?: number;
+    occurrences?: number;
+  }): string | null {
+    if (
+      !event.appId ||
+      !event.sessionId ||
+      !event.type ||
+      !event.fingerprint ||
+      typeof event.ts !== 'number'
+    ) {
+      return null;
+    }
+
+    return [
+      DEDUP_PREFIX,
+      event.appId,
+      event.sessionId,
+      event.type,
+      event.fingerprint,
+      event.ts,
+      typeof event.occurrences === 'number' ? event.occurrences : 1,
+    ].join(':');
   }
 }

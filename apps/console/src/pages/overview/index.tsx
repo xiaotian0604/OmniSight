@@ -65,7 +65,7 @@ export default function OverviewPage() {
       <div className="card mb-6">
         <div className="card-header">
           <span className="card-title">错误率趋势</span>
-          <span className="card-subtitle">展示选定时间范围内的错误率变化</span>
+          <span className="card-subtitle">错误次数按真实 occurrences 计入，展示选定时间范围内的错误率变化</span>
         </div>
         <ErrorRateChart />
       </div>
@@ -79,7 +79,7 @@ export default function OverviewPage() {
       <div className="card">
         <div className="card-header">
           <span className="card-title">Top 10 高频错误</span>
-          <span className="card-subtitle">按发生频次排序的错误聚合列表</span>
+          <span className="card-subtitle">按真实发生次数排序的错误聚合列表</span>
         </div>
         <TopErrors />
       </div>

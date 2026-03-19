@@ -35,8 +35,8 @@ let IngestWorker = IngestWorker_1 = class IngestWorker {
         let insertedCount = 0;
         let dedupCount = 0;
         for (const event of job.data) {
-            if (event.fingerprint) {
-                const dedupKey = `${DEDUP_PREFIX}${event.appId}:${event.fingerprint}`;
+            const dedupKey = this.buildDedupKey(event);
+            if (dedupKey) {
                 const setResult = await this.redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
                 if (setResult === null) {
                     dedupCount++;
@@ -63,6 +63,24 @@ let IngestWorker = IngestWorker_1 = class IngestWorker {
     }
     enrich(event) {
         return event;
+    }
+    buildDedupKey(event) {
+        if (!event.appId ||
+            !event.sessionId ||
+            !event.type ||
+            !event.fingerprint ||
+            typeof event.ts !== 'number') {
+            return null;
+        }
+        return [
+            DEDUP_PREFIX,
+            event.appId,
+            event.sessionId,
+            event.type,
+            event.fingerprint,
+            event.ts,
+            typeof event.occurrences === 'number' ? event.occurrences : 1,
+        ].join(':');
     }
 };
 exports.IngestWorker = IngestWorker;

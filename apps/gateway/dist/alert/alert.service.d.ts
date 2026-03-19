@@ -15,10 +15,12 @@ export declare class AlertService {
         scanResult: HighFrequencyErrorScanResult | null;
         sentCount: number;
         skippedCount: number;
+        failedCount: number;
     }>;
     scanHighFrequencyErrors(): Promise<HighFrequencyErrorScanResult>;
     private checkCooldown;
     private recordAlertSent;
+    private releaseCooldown;
     private buildAlertPayload;
     private getGitInfoForError;
     private sendToChannels;

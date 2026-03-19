@@ -39,6 +39,7 @@ import { StackTrace } from './StackTrace';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ReplayLink } from './ReplayLink';
 import { EmptyState } from '@/components/EmptyState';
+import { useGlobalStore } from '@/store/global.store';
 
 /**
  * 错误详情页面组件
@@ -61,6 +62,7 @@ export default function ErrorDetailPage() {
    */
   const { fingerprint } = useParams<{ fingerprint: string }>();
   const navigate = useNavigate();
+  const { appId } = useGlobalStore();
 
   /**
    * 请求错误详情数据
@@ -72,7 +74,7 @@ export default function ErrorDetailPage() {
    *   防止 URL 参数缺失时发起无效请求
    */
   const { data: detail, isLoading, isError } = useQuery<ErrorDetail>({
-    queryKey: ['error-detail', fingerprint],
+    queryKey: ['error-detail', appId, fingerprint],
     queryFn: () => getErrorDetail(fingerprint!),
     enabled: !!fingerprint,
   });
@@ -123,7 +125,7 @@ export default function ErrorDetailPage() {
             发生 <strong className="text-error">{detail.count.toLocaleString()}</strong> 次
           </span>
           <span>
-            影响 <strong>{detail.affectedUsers.toLocaleString()}</strong> 位用户
+            影响 <strong>{detail.affectedUsers.toLocaleString()}</strong> 人
           </span>
           <span>
             首次发生: {new Date(detail.firstSeen).toLocaleString('zh-CN')}
@@ -131,6 +133,10 @@ export default function ErrorDetailPage() {
           <span>
             最近发生: {new Date(detail.lastSeen).toLocaleString('zh-CN')}
           </span>
+        </div>
+
+        <div style={{ marginTop: '8px', fontSize: '12px', color: '#8b949e' }}>
+          次数已包含同一 session 内 60 秒防抖窗口中聚合补发的重复错误；影响人数按去重 audience 统计。
         </div>
 
         {/* 环境标签 */}

@@ -64,6 +64,7 @@ export interface HighFrequencyErrorScanResult {
     windowEnd: Date;
 }
 export interface HighFrequencyError {
+    appId: string;
     fingerprint: string;
     message: string;
     filename?: string;

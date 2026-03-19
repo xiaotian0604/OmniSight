@@ -97,15 +97,21 @@ export class ReplayService {
    * @returns 录像记录（包含 session_id, app_id, events, error_count, duration, created_at）
    * @throws {NotFoundException} 当指定的 session_id 不存在时抛出 404 错误
    */
-  async getBySessionId(sessionId: string) {
+  async getBySessionId(sessionId: string, appId?: string) {
     const result = await this.pg.query(
-      'SELECT * FROM replay_sessions WHERE session_id = $1',
-      [sessionId],
+      `SELECT *
+       FROM replay_sessions
+       WHERE session_id = $1
+         AND ($2::text IS NULL OR app_id = $2)
+       LIMIT 1`,
+      [sessionId, appId ?? null],
     );
 
     if (result.rows.length === 0) {
       throw new NotFoundException(
-        `未找到会话 ID 为 ${sessionId} 的录像记录`,
+        appId
+          ? `未找到应用 ${appId} 下会话 ID 为 ${sessionId} 的录像记录`
+          : `未找到会话 ID 为 ${sessionId} 的录像记录`,
       );
     }
 

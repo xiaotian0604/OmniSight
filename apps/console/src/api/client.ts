@@ -68,7 +68,10 @@ export const apiClient = axios.create({
  */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const appId = localStorage.getItem('omnisight-app-id');
+    const appId =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem('omnisight-app-id')
+        : null;
     if (appId) {
       config.headers.set('x-app-id', appId);
       /**

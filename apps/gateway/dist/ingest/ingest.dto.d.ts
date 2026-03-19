@@ -7,4 +7,5 @@ export declare class IngestEventDto {
     ua?: string;
     payload?: Record<string, any>;
     fingerprint?: string;
+    occurrences?: number;
 }

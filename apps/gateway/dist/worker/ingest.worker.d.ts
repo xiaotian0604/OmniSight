@@ -8,4 +8,5 @@ export declare class IngestWorker {
     constructor(pg: Pool, redis: Redis);
     handleIngestJob(job: Job<any[]>): Promise<void>;
     private enrich;
+    private buildDedupKey;
 }

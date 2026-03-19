@@ -100,4 +100,14 @@ __decorate([
     (0, class_validator_1.IsString)({ message: 'fingerprint 必须是字符串' }),
     __metadata("design:type", String)
 ], IngestEventDto.prototype, "fingerprint", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: '错误累计发生次数。默认每条事件记为 1；' +
+            '当 SDK 在 60 秒防抖窗口内折叠重复错误时，会补发大于 1 的 occurrences 以恢复真实次数',
+        example: 4,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)({}, { message: 'occurrences 必须是数字' }),
+    __metadata("design:type", Number)
+], IngestEventDto.prototype, "occurrences", void 0);
 //# sourceMappingURL=ingest.dto.js.map

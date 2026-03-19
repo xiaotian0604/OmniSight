@@ -9,6 +9,7 @@ export declare class AlertWorker {
     triggerManualScan(): Promise<{
         errors: number;
         sent: number;
+        failed: number;
         skipped: number;
     }>;
 }

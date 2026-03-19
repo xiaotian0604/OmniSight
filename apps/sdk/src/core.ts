@@ -15,6 +15,10 @@
  * - Core 采用类而非纯函数，因为需要维护内部状态（配置、回调列表、cleanup 函数列表）
  * - 配置合并使用"先展开 config 再用 ?? 填默认值"的策略，确保用户传入的 falsy 值（如 sampleRate: 0）不会被默认值覆盖
  * - 错误指纹（fingerprint）使用 message + stack 第一帧生成，在聚合时能有效合并同一来源的错误
+ * - 客户端错误去重采用"会话内去重 + 次数补发"：
+ *   1. 同一 session 中，短时间内重复错误只即时上报一次，避免刷屏
+ *   2. 被折叠的重复错误会累计 occurrences，在超时或页面卸载时补发
+ *   3. 手动 resetSession() 后，相同错误会重新计入新的会话统计
  */
 
 /* 导入会话管理模块 */
@@ -100,6 +104,28 @@ export interface EventData extends Record<string, unknown> {
  * @param {EventData} event - 被捕获的事件数据
  */
 export type EventCallback = (event: EventData) => void;
+
+/**
+ * 60 秒防抖窗口内被折叠的重复错误
+ *
+ * 设计目标：
+ * - 首次错误立即上报，保证实时性
+ * - 后续重复错误不立刻上报，避免刷屏
+ * - 但重复次数不能丢，要在超时或页面卸载时补发给服务端
+ */
+interface PendingDuplicateError {
+  /** 在首个错误之后，额外发生的重复次数 */
+  count: number;
+  /** 这组重复错误的最后一次事件快照，用于保留最新 ts/url/session 等上下文 */
+  lastEvent: Record<string, unknown>;
+  /** 当前防抖窗口的到期时间 */
+  flushAt: number;
+  /** 到期后触发补发的定时器 */
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** 错误防抖窗口：同一 session、同一 fingerprint 在 60 秒内只即时上报一次 */
+const ERROR_DEDUP_TTL_MS = 60_000;
 
 /* ---------------------------------------------------------------
  * 错误指纹生成函数
@@ -200,6 +226,9 @@ export class Core {
   /** 批量上报器实例：将事件加入队列，定时批量发送 */
   private transport: BatchTransport;
 
+  /** 被 60 秒防抖折叠掉的重复错误，等待补发 occurrences */
+  private pendingDuplicateErrors: Map<string, PendingDuplicateError> = new Map();
+
   /**
    * uploadReplay 方法的具体实现
    * 初始为空函数，由 replay 模块在初始化时注入真正的实现
@@ -238,11 +267,14 @@ export class Core {
     /* 初始化采样器，传入配置的采样率 */
     this.sampler = new Sampler(this.config.sampleRate);
 
-    /* 初始化去重器，使用默认参数（容量 100，TTL 60 秒） */
-    this.deduplicator = new Deduplicator();
+    /* 初始化去重器，限定 60 秒内相同错误的防抖窗口 */
+    this.deduplicator = new Deduplicator(100, ERROR_DEDUP_TTL_MS);
 
     /* 初始化批量上报器，传入上报地址和 API Key */
     this.transport = new BatchTransport(this.config.dsn, this.config.apiKey);
+    this.transport.registerBeforeFlushHook((force) => {
+      this.flushPendingDuplicateErrors(force);
+    });
 
     /* 调试模式下输出初始化信息 */
     if (this.config.debug) {
@@ -285,12 +317,15 @@ export class Core {
    * @param {EventData} event - 采集器提交的原始事件数据
    */
   public capture(event: EventData): void {
+    const sessionId = getSessionId();
+    const timestamp = Date.now();
+
     /* 为事件补充公共字段 */
     const enrichedEvent: Record<string, unknown> = {
       ...event,
       appId: this.config.appId,                    /* 应用标识符 */
-      sessionId: getSessionId(),                   /* 当前会话 ID */
-      ts: Date.now(),                              /* 客户端时间戳（毫秒） */
+      sessionId,                                   /* 当前会话 ID */
+      ts: timestamp,                               /* 客户端时间戳（毫秒） */
       url: typeof location !== 'undefined' ? location.href : '', /* 当前页面 URL */
       ua: typeof navigator !== 'undefined' ? navigator.userAgent : '', /* User-Agent */
       sdkVersion: '0.0.1',                        /* SDK 版本号 */
@@ -308,14 +343,35 @@ export class Core {
       /* 将指纹附加到事件数据中 */
       enrichedEvent.fingerprint = fingerprint;
 
-      /* 去重检查：如果是短时间内的重复错误，跳过上报 */
-      if (this.deduplicator.isDuplicate(fingerprint)) {
-        /* 调试模式下输出跳过信息 */
+      /**
+       * 会话内去重：
+       * - 仅在同一个 session 中对相同 fingerprint 做 60 秒防抖
+       * - 如果业务方手动 resetSession()，新的 sessionId 会立即放开上报
+       *
+       * 这样既能避免同一页面报错循环刷屏，又不会把"新会话中的真实复现"
+       * 错误错误地吞掉。
+       */
+      const sessionScopedFingerprint = `${enrichedEvent.sessionId}:${fingerprint}`;
+
+      /**
+       * 去重检查：
+       * - 首次出现：即时上报，并显式记录 occurrences=1
+       * - 60 秒内重复：不再立刻上报，而是累积 occurrences，等待补发
+       */
+      if (this.deduplicator.isDuplicate(sessionScopedFingerprint)) {
+        this.bufferDuplicateError(sessionScopedFingerprint, enrichedEvent);
+
         if (this.config.debug) {
-          console.log('[OmniSight] 重复错误已跳过:', event.message);
+          console.log('[OmniSight] 会话内重复错误已累计:', {
+            message: event.message,
+            sessionId,
+            fingerprint,
+          });
         }
         return;
       }
+
+      enrichedEvent.occurrences = 1;
     }
 
     /* 采样判断：决定该事件是否应该被上报 */
@@ -454,6 +510,99 @@ export class Core {
     /* 调试模式下输出销毁完成信息 */
     if (this.config.debug) {
       console.log('[OmniSight] SDK 已销毁');
+    }
+  }
+
+  /**
+   * 累积 60 秒防抖窗口内的重复错误
+   *
+   * 这里不立即上报，避免循环报错把网络和服务端压满；
+   * 但也不直接丢弃，而是在窗口结束或页面卸载时补发 occurrences。
+   */
+  private bufferDuplicateError(
+    dedupKey: string,
+    event: Record<string, unknown>,
+  ): void {
+    const existing = this.pendingDuplicateErrors.get(dedupKey);
+    const nextFlushAt = Date.now() + ERROR_DEDUP_TTL_MS;
+
+    if (existing) {
+      clearTimeout(existing.timer);
+      existing.count += 1;
+      existing.lastEvent = event;
+      existing.flushAt = nextFlushAt;
+      existing.timer = this.createPendingDuplicateTimer(dedupKey);
+      return;
+    }
+
+    this.pendingDuplicateErrors.set(dedupKey, {
+      count: 1,
+      lastEvent: event,
+      flushAt: nextFlushAt,
+      timer: this.createPendingDuplicateTimer(dedupKey),
+    });
+  }
+
+  /**
+   * 创建重复错误的补发定时器
+   *
+   * 用户如果在页面上持续停留超过 60 秒，不能只依赖卸载时补发，
+   * 否则累计次数会一直滞留在内存里。
+   */
+  private createPendingDuplicateTimer(
+    dedupKey: string,
+  ): ReturnType<typeof setTimeout> {
+    return setTimeout(() => {
+      this.flushPendingDuplicateError(dedupKey);
+    }, ERROR_DEDUP_TTL_MS);
+  }
+
+  /**
+   * 将某一组被防抖折叠的重复错误补发给服务端
+   *
+   * 注意：
+   * - 这里只补 occurrences，不再触发 emit()，避免 replay/告警等监听器被重复激活
+   * - 首个错误已经即时上报过，因此这里的 occurrences 表示"额外重复次数"
+   */
+  private flushPendingDuplicateError(dedupKey: string): void {
+    const pending = this.pendingDuplicateErrors.get(dedupKey);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingDuplicateErrors.delete(dedupKey);
+
+    this.transport.add({
+      ...pending.lastEvent,
+      occurrences: pending.count,
+    });
+
+    if (this.config.debug) {
+      console.log('[OmniSight] 已补发重复错误计数:', {
+        fingerprint: pending.lastEvent.fingerprint,
+        sessionId: pending.lastEvent.sessionId,
+        occurrences: pending.count,
+      });
+    }
+  }
+
+  /**
+   * 在批量上报前补发已到期的重复错误
+   *
+   * - 常规 flush：只补发已经到达 60 秒窗口末尾的错误
+   * - 强制 flush（beforeunload / destroy）：补发全部，避免营销页快速关闭时丢失累计次数
+   */
+  private flushPendingDuplicateErrors(force: boolean = false): void {
+    if (this.pendingDuplicateErrors.size === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    for (const [dedupKey, pending] of this.pendingDuplicateErrors.entries()) {
+      if (!force && pending.flushAt > now) {
+        continue;
+      }
+
+      this.flushPendingDuplicateError(dedupKey);
     }
   }
 }

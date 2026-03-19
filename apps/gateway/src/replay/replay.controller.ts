@@ -139,8 +139,11 @@ export class ReplayController {
   })
   @ApiResponse({ status: 200, description: '返回录像数据' })
   @ApiResponse({ status: 404, description: '录像不存在' })
-  async getReplay(@Param('sessionId') sessionId: string) {
-    return this.replayService.getBySessionId(sessionId);
+  async getReplay(
+    @Param('sessionId') sessionId: string,
+    @Query('appId') appId?: string,
+  ) {
+    return this.replayService.getBySessionId(sessionId, appId);
   }
 
   /**

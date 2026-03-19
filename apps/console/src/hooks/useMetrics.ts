@@ -66,10 +66,15 @@ function calculateInterval(start: Date, end: Date): string {
  * @returns React Query 查询结果，data 类型为 TimeSeriesPoint[]
  */
 export function useErrorRateSeries() {
-  const { timeRange } = useGlobalStore();
+  const { appId, timeRange } = useGlobalStore();
 
   return useQuery<TimeSeriesPoint[]>({
-    queryKey: ['error-rate-series', timeRange.start.toISOString(), timeRange.end.toISOString()],
+    queryKey: [
+      'error-rate-series',
+      appId,
+      timeRange.start.toISOString(),
+      timeRange.end.toISOString(),
+    ],
     queryFn: () =>
       getErrorRateSeries({
         start: timeRange.start.toISOString(),
@@ -91,10 +96,10 @@ export function useErrorRateSeries() {
  * @returns React Query 查询结果，data 类型为 ApiMetricItem[]
  */
 export function useApiMetrics() {
-  const { timeRange } = useGlobalStore();
+  const { appId, timeRange } = useGlobalStore();
 
   return useQuery<ApiMetricItem[]>({
-    queryKey: ['api-metrics', timeRange.start.toISOString(), timeRange.end.toISOString()],
+    queryKey: ['api-metrics', appId, timeRange.start.toISOString(), timeRange.end.toISOString()],
     queryFn: () =>
       getApiMetrics({
         start: timeRange.start.toISOString(),
@@ -119,10 +124,10 @@ export function useApiMetrics() {
  * @returns React Query 查询结果，data 类型为 VitalsSeriesData
  */
 export function useVitalsSeries() {
-  const { timeRange } = useGlobalStore();
+  const { appId, timeRange } = useGlobalStore();
 
   return useQuery<VitalsSeriesData>({
-    queryKey: ['vitals-series', timeRange.start.toISOString(), timeRange.end.toISOString()],
+    queryKey: ['vitals-series', appId, timeRange.start.toISOString(), timeRange.end.toISOString()],
     queryFn: () =>
       getVitalsSeries({
         start: timeRange.start.toISOString(),

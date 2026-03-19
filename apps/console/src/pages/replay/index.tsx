@@ -56,7 +56,7 @@ function formatDuration(ms: number): string {
  */
 export default function ReplayPage() {
   const navigate = useNavigate();
-  const { timeRange } = useGlobalStore();
+  const { appId, timeRange } = useGlobalStore();
 
   /**
    * 请求录像列表
@@ -66,6 +66,7 @@ export default function ReplayPage() {
   const { data: sessions, isLoading } = useQuery<ReplaySession[]>({
     queryKey: [
       'replay-list',
+      appId,
       timeRange.start.toISOString(),
       timeRange.end.toISOString(),
     ],

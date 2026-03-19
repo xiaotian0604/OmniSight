@@ -16,23 +16,11 @@
  * - 选择不同的 appId 后自动切换
  * - 切换后所有数据查询会自动更新（通过 Zustand store 联动）
  */
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useGlobalStore } from '@/store/global.store';
-
-/**
- * AppId 信息接口
- * 对应 Gateway /v1/apps 接口返回的数据结构
- */
-interface AppInfo {
-  /** 项目标识 */
-  appId: string;
-  /** 错误事件数量 */
-  errorCount: string;
-  /** 总事件数量 */
-  totalCount: string;
-  /** 最近事件时间 */
-  lastSeen: string;
-}
+import { getApps } from '@/api/apps';
+import type { AppInfo } from '@/api/apps';
 
 /**
  * AppId 选择器组件
@@ -47,58 +35,44 @@ interface AppInfo {
 export function AppIdSelector() {
   /** 下拉菜单展开状态 */
   const [isOpen, setIsOpen] = useState(false);
-  /** appId 列表 */
-  const [apps, setApps] = useState<AppInfo[]>([]);
-  /** 加载状态 */
-  const [loading, setLoading] = useState(true);
-  /** 错误状态 */
-  const [error, setError] = useState<string | null>(null);
 
   /** 从 Zustand store 获取当前 appId 和设置方法 */
   const { appId, setAppId } = useGlobalStore();
 
   /**
-   * 组件挂载时获取 appId 列表
+   * 通过 React Query 获取 appId 列表
+   *
+   * 这里统一走 api 层做数据正规化，避免 SQL 聚合结果里的字符串数字
+   * 在不同组件中被重复解析。
    */
+  const {
+    data: apps = [],
+    isLoading: loading,
+    isError,
+    error,
+    refetch,
+  } = useQuery<AppInfo[]>({
+    queryKey: ['apps-list'],
+    queryFn: getApps,
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
-    fetchApps();
-  }, []);
-
-  /**
-   * 从 Gateway 获取 appId 列表
-   */
-  async function fetchApps() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch('/v1/apps');
-      if (!response.ok) {
-        throw new Error(`获取 appId 列表失败: ${response.statusText}`);
-      }
-
-      const data: AppInfo[] = await response.json();
-      setApps(data);
-
-      /**
-       * 如果当前没有选中的 appId，或者选中的 appId 不在列表中，
-       * 自动选择第一个 appId（如果有的话）
-       */
-      if (data.length > 0) {
-        const currentAppId = localStorage.getItem('omnisight-app-id');
-        const appIdExists = data.some(app => app.appId === currentAppId);
-
-        if (!currentAppId || !appIdExists) {
-          setAppId(data[0].appId);
-        }
-      }
-    } catch (err) {
-      console.error('[AppIdSelector] 获取 appId 列表失败:', err);
-      setError(err instanceof Error ? err.message : '未知错误');
-    } finally {
-      setLoading(false);
+    if (apps.length === 0) {
+      return;
     }
-  }
+
+    /**
+     * 如果当前没有选中的 appId，或者选中的 appId 已不在列表中，
+     * 自动选择第一个可用项目。
+     */
+    const currentAppId = localStorage.getItem('omnisight-app-id');
+    const appIdExists = apps.some((app) => app.appId === currentAppId);
+
+    if (!currentAppId || !appIdExists) {
+      setAppId(apps[0].appId);
+    }
+  }, [apps, setAppId]);
 
   /**
    * 选择 appId
@@ -114,15 +88,14 @@ export function AppIdSelector() {
    * @param count - 数量
    * @returns 格式化后的字符串
    */
-  function formatCount(count: string): string {
-    const num = parseInt(count, 10);
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
+  function formatCount(count: number): string {
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M`;
     }
-    if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
+    if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}K`;
     }
-    return num.toString();
+    return count.toString();
   }
 
   /**
@@ -159,11 +132,11 @@ export function AppIdSelector() {
   /**
    * 错误状态
    */
-  if (error) {
+  if (isError) {
     return (
       <div className="app-id-selector error">
-        <span className="error-text">⚠️ {error}</span>
-        <button onClick={fetchApps} className="retry-button">
+        <span className="error-text">⚠️ {error instanceof Error ? error.message : '未知错误'}</span>
+        <button onClick={() => refetch()} className="retry-button">
           重试
         </button>
       </div>
@@ -211,10 +184,16 @@ export function AppIdSelector() {
               <div className="app-info">
                 <span className="app-id">{app.appId}</span>
                 <span className="app-stats">
-                  <span className="error-count">
+                  <span
+                    className="error-count"
+                    title="错误真实发生次数，已包含同错防抖窗口内聚合的 occurrences"
+                  >
                     🐛 {formatCount(app.errorCount)}
                   </span>
-                  <span className="total-count">
+                  <span
+                    className="total-count"
+                    title="总事件数；其中错误事件按真实 occurrences 计权"
+                  >
                     📊 {formatCount(app.totalCount)}
                   </span>
                 </span>

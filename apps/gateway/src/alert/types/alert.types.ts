@@ -229,6 +229,7 @@ export interface HighFrequencyErrorScanResult {
  * @property lastSeen — 最后发生时间
  */
 export interface HighFrequencyError {
+  appId: string;
   fingerprint: string;
   message: string;
   filename?: string;

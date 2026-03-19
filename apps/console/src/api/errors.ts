@@ -22,8 +22,8 @@ import { apiClient } from './client';
  * @property fingerprint - 错误指纹（hash(message + stack[0])），用于聚合去重
  * @property message - 错误消息文本（如 "Cannot read property 'x' of undefined"）
  * @property filename - 发生错误的文件名（如 "app.js"）
- * @property count - 该错误在时间范围内的发生次数
- * @property affectedUsers - 受影响的独立用户数（按 session_id 去重）
+ * @property count - 该错误在时间范围内的真实发生次数（按 occurrences 聚合）
+ * @property affectedUsers - 受影响的独立 audience 数（优先按 userId，否则按 session_id 去重）
  * @property lastSeen - 最后一次发生时间（ISO 8601 格式）
  * @property firstSeen - 首次发生时间（ISO 8601 格式）
  */
@@ -33,6 +33,16 @@ export interface ErrorGroup {
   filename?: string;
   count: number;
   affectedUsers: number;
+  lastSeen: string;
+  firstSeen: string;
+}
+
+interface RawErrorGroup {
+  fingerprint: string;
+  message: string;
+  filename?: string;
+  count: number | string;
+  affectedUsers: number | string;
   lastSeen: string;
   firstSeen: string;
 }
@@ -47,8 +57,8 @@ export interface ErrorGroup {
  * @property filename - 源文件名
  * @property lineno - 源码行号
  * @property colno - 源码列号
- * @property count - 总发生次数
- * @property affectedUsers - 受影响用户数
+ * @property count - 总发生次数（按 occurrences 聚合）
+ * @property affectedUsers - 受影响 audience 数（优先按 userId，否则按 session_id 去重）
  * @property lastSeen - 最后发生时间
  * @property firstSeen - 首次发生时间
  * @property breadcrumbs - 错误发生前的用户操作面包屑（时间倒序）
@@ -64,6 +74,22 @@ export interface ErrorDetail {
   colno?: number;
   count: number;
   affectedUsers: number;
+  lastSeen: string;
+  firstSeen: string;
+  breadcrumbs: Breadcrumb[];
+  replaySessionId?: string;
+  tags: Record<string, string>;
+}
+
+interface RawErrorDetail {
+  fingerprint: string;
+  message: string;
+  stack?: string;
+  filename?: string;
+  lineno?: number;
+  colno?: number;
+  count: number | string;
+  affectedUsers: number | string;
   lastSeen: string;
   firstSeen: string;
   breadcrumbs: Breadcrumb[];
@@ -116,7 +142,7 @@ export interface GetErrorsParams {
  * 返回按指纹分组的错误列表，每组显示频次、影响用户数、首次/最后发生时间
  *
  * 后端 SQL 逻辑：
- *   SELECT fingerprint, payload->>'message', COUNT(*), COUNT(DISTINCT session_id), ...
+ *   SELECT fingerprint, payload->>'message', SUM(occurrences), COUNT(DISTINCT audience), ...
  *   FROM events WHERE type = 'error' AND ts BETWEEN $start AND $end
  *   GROUP BY fingerprint ORDER BY count DESC
  *
@@ -124,7 +150,7 @@ export interface GetErrorsParams {
  * @returns 错误聚合列表
  */
 export async function getErrors(params: GetErrorsParams): Promise<ErrorGroup[]> {
-  const { data } = await apiClient.get<ErrorGroup[]>('/errors', {
+  const { data } = await apiClient.get<RawErrorGroup[]>('/errors', {
     params: {
       from: params.start,
       to: params.end,
@@ -133,7 +159,11 @@ export async function getErrors(params: GetErrorsParams): Promise<ErrorGroup[]> 
       sort: params.sort,
     },
   });
-  return data;
+  return data.map((item) => ({
+    ...item,
+    count: Number(item.count),
+    affectedUsers: Number(item.affectedUsers),
+  }));
 }
 
 /**
@@ -156,6 +186,10 @@ export async function getErrors(params: GetErrorsParams): Promise<ErrorGroup[]> 
  * @returns 错误详情数据
  */
 export async function getErrorDetail(fingerprint: string): Promise<ErrorDetail> {
-  const { data } = await apiClient.get<ErrorDetail>(`/errors/${fingerprint}`);
-  return data;
+  const { data } = await apiClient.get<RawErrorDetail>(`/errors/${fingerprint}`);
+  return {
+    ...data,
+    count: Number(data.count),
+    affectedUsers: Number(data.affectedUsers),
+  };
 }

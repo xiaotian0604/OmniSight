@@ -65,6 +65,7 @@ const EVENT_TYPES = [
  * - ua: 可选，User-Agent 字符串
  * - payload: 可选，事件的详细数据（不同类型有不同结构）
  * - fingerprint: 可选，错误去重指纹（仅 error 类型事件有值）
+ * - occurrences: 可选，错误累计发生次数（SDK 防抖聚合后的补偿字段）
  */
 export class IngestEventDto {
   @ApiProperty({
@@ -137,4 +138,14 @@ export class IngestEventDto {
   @IsOptional()
   @IsString({ message: 'fingerprint 必须是字符串' })
   fingerprint?: string;
+
+  @ApiPropertyOptional({
+    description:
+      '错误累计发生次数。默认每条事件记为 1；' +
+      '当 SDK 在 60 秒防抖窗口内折叠重复错误时，会补发大于 1 的 occurrences 以恢复真实次数',
+    example: 4,
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'occurrences 必须是数字' })
+  occurrences?: number;
 }

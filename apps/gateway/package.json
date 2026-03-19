@@ -12,6 +12,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
     "@nestjs/bull": "^10.1.0",
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.2.0",

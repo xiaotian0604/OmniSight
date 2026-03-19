@@ -21,6 +21,7 @@ import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getReplayBySessionId } from '@/api/replay';
 import type { ReplayDetail } from '@/api/replay';
+import { useGlobalStore } from '@/store/global.store';
 
 /* ================================================================
    类型定义
@@ -90,6 +91,8 @@ export interface UseReplayReturn {
  *    - Player 组件通过 setCurrentTime 回调同步当前播放进度
  */
 export function useReplay(sessionId: string): UseReplayReturn {
+  const { appId } = useGlobalStore();
+
   /**
    * 播放状态
    * 初始状态：暂停、1 倍速、时间 0
@@ -120,7 +123,7 @@ export function useReplay(sessionId: string): UseReplayReturn {
     isError,
     error,
   } = useQuery<ReplayDetail>({
-    queryKey: ['replay', sessionId],
+    queryKey: ['replay', appId, sessionId],
     queryFn: () => getReplayBySessionId(sessionId),
     staleTime: 5 * 60 * 1000,
     enabled: !!sessionId,

@@ -10,7 +10,7 @@
  * 上传流程：
  * 1. CI/CD 构建时，webpack/vite 生成 .map 文件
  * 2. 构建脚本调用 POST /v1/sourcemap 接口上传 .map 文件
- *    请求参数：appId（项目 ID）、version（版本号，通常为 git sha）、file（.map 文件）
+ *    请求参数：appId（项目 ID）、version（版本号，通常为 git sha）、filename、mapContent
  * 3. Gateway 将 .map 文件存储到文件系统，索引信息写入 sourcemaps 表
  * 4. 查看错误详情时，后端根据 appId + version 找到对应的 .map 文件
  * 5. 使用 source-map 库还原压缩后的行列号为源码位置
@@ -21,35 +21,13 @@
  * 3. 提供上传命令示例
  *
  * 数据来源：
- *   TODO: useQuery → GET /v1/sourcemaps
- *   目前使用占位数据展示页面结构
+ *   useQuery → GET /v1/sourcemap
+ *   通过 appId 过滤当前项目的上传记录
  */
+import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '@/components/EmptyState';
-
-/**
- * SourceMap 记录类型
- *
- * @property id - 记录 ID
- * @property version - 应用版本号（通常为 git commit sha 的前 8 位）
- * @property filename - 原始 JS 文件名（如 "main.js"、"vendor.js"）
- * @property mapPath - .map 文件的存储路径
- * @property createdAt - 上传时间
- */
-interface SourcemapRecord {
-  id: string;
-  version: string;
-  filename: string;
-  mapPath: string;
-  createdAt: string;
-}
-
-/**
- * 占位数据
- * 展示页面结构和样式，后续替换为真实 API 数据
- *
- * TODO: 接入 GET /v1/sourcemaps API
- */
-const MOCK_RECORDS: SourcemapRecord[] = [];
+import { getSourcemaps } from '@/api/sourcemap';
+import { useGlobalStore } from '@/store/global.store';
 
 /**
  * SourceMap 管理页面组件
@@ -64,7 +42,11 @@ const MOCK_RECORDS: SourcemapRecord[] = [];
  * - 安全考虑：.map 文件不应部署到生产环境的 CDN
  */
 export default function SourcemapPage() {
-  const records = MOCK_RECORDS;
+  const { appId } = useGlobalStore();
+  const { data: records = [], isLoading } = useQuery({
+    queryKey: ['sourcemap-records', appId],
+    queryFn: () => getSourcemaps(),
+  });
 
   return (
     <div style={{ maxWidth: '800px' }}>
@@ -76,7 +58,7 @@ export default function SourcemapPage() {
         </div>
 
         <p style={{ fontSize: '13px', color: '#8b949e', marginBottom: '12px' }}>
-          构建完成后，使用以下命令上传 .map 文件到 OmniSight：
+          构建完成后，使用 JSON 请求上传 .map 文件内容到 OmniSight：
         </p>
 
         {/* curl 上传命令示例 */}
@@ -84,20 +66,40 @@ export default function SourcemapPage() {
           <pre style={{ margin: 0 }}>{`# 上传 SourceMap 文件
 # 在 CI/CD 的构建步骤之后执行
 
-# 获取当前 git commit sha 作为版本号
 VERSION=$(git rev-parse --short HEAD)
+COMMIT=$(git rev-parse HEAD)
+AUTHOR=$(git log -1 --pretty=%an)
+MESSAGE=$(git log -1 --pretty=%s)
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-# 遍历 dist 目录下的所有 .map 文件并上传
-for mapfile in dist/assets/*.map; do
-  curl -X POST \\
-    -H "x-api-key: your-api-key" \\
-    -F "appId=your-app-id" \\
-    -F "version=$VERSION" \\
-    -F "file=@$mapfile" \\
-    https://your-gateway.com/v1/sourcemap
+for mapfile in dist/assets/*.js.map; do
+  filename=$(basename "$mapfile" .map)
+  jq -n \
+    --arg appId "your-app-id" \
+    --arg version "$VERSION" \
+    --arg filename "$filename" \
+    --rawfile mapContent "$mapfile" \
+    --arg gitCommit "$COMMIT" \
+    --arg gitAuthor "$AUTHOR" \
+    --arg gitMessage "$MESSAGE" \
+    --arg gitBranch "$BRANCH" \
+    '{
+      appId: $appId,
+      version: $version,
+      filename: $filename,
+      mapContent: $mapContent,
+      gitCommit: $gitCommit,
+      gitAuthor: $gitAuthor,
+      gitMessage: $gitMessage,
+      gitBranch: $gitBranch
+    }' \
+  | curl -X POST \
+      -H "Content-Type: application/json" \
+      -H "x-api-key: your-api-key" \
+      --data-binary @- \
+      https://your-gateway.com/v1/sourcemap
 done
 
-# 上传完成后，删除 .map 文件（不要部署到 CDN）
 rm -f dist/assets/*.map`}</pre>
         </div>
 
@@ -120,11 +122,17 @@ rm -f dist/assets/*.map`}</pre>
       <div className="card">
         <div className="card-header">
           <span className="card-title">上传记录</span>
-          <span className="card-subtitle">已上传的 SourceMap 文件列表</span>
+          <span className="card-subtitle">当前项目 {appId} 的 SourceMap 文件列表</span>
         </div>
 
+        {isLoading && (
+          <div className="text-muted" style={{ padding: '24px', textAlign: 'center' }}>
+            加载中...
+          </div>
+        )}
+
         {/* 空状态 */}
-        {records.length === 0 && (
+        {!isLoading && records.length === 0 && (
           <EmptyState
             icon="🗺️"
             title="暂无 SourceMap"
@@ -133,7 +141,7 @@ rm -f dist/assets/*.map`}</pre>
         )}
 
         {/* 记录表格 */}
-        {records.length > 0 && (
+        {!isLoading && records.length > 0 && (
           <div className="table-container">
             <table>
               <thead>
@@ -141,6 +149,7 @@ rm -f dist/assets/*.map`}</pre>
                   <th>版本号</th>
                   <th>文件名</th>
                   <th>存储路径</th>
+                  <th>Git 信息</th>
                   <th>上传时间</th>
                 </tr>
               </thead>
@@ -160,6 +169,17 @@ rm -f dist/assets/*.map`}</pre>
                     {/* 存储路径 */}
                     <td className="font-mono text-muted" style={{ fontSize: '12px' }}>
                       {record.mapPath}
+                    </td>
+
+                    <td className="text-muted" style={{ fontSize: '12px' }}>
+                      {record.gitCommit ? (
+                        <div>
+                          <div className="font-mono">{record.gitCommit.slice(0, 8)}</div>
+                          {record.gitAuthor && <div>{record.gitAuthor}</div>}
+                        </div>
+                      ) : (
+                        '-'
+                      )}
                     </td>
 
                     {/* 上传时间 */}

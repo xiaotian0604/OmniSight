@@ -48,8 +48,14 @@ export class BatchTransport {
   /** 事件队列：存储待发送的事件 */
   private queue: Record<string, unknown>[] = [];
 
+  /** flush 前执行的钩子，用于让上层在真正发送前补充待发事件 */
+  private beforeFlushHooks: Array<(force: boolean) => void> = [];
+
   /** 定时 flush 的定时器引用 */
   private timer: ReturnType<typeof setTimeout> | null = null;
+
+  /** flush 执行中的标志，避免钩子里 add() 触发递归 flush */
+  private isFlushing = false;
 
   /** 数据上报的目标 URL（Gateway 的批量上报接口） */
   private endpoint: string;
@@ -94,7 +100,7 @@ export class BatchTransport {
      * 页面卸载前强制 flush 队列中剩余的事件
      */
     this.onBeforeUnload = () => {
-      this.flush();
+      this.flush(true);
     };
 
     /**
@@ -116,6 +122,14 @@ export class BatchTransport {
   public add(event: Record<string, unknown>): void {
     /* 将事件加入队列末尾 */
     this.queue.push(event);
+
+    /**
+     * flush 执行过程中允许继续往当前批次追加事件，
+     * 但不在这里重新启动定时器或递归触发 flush。
+     */
+    if (this.isFlushing) {
+      return;
+    }
 
     /**
      * 检查队列是否已满
@@ -152,9 +166,9 @@ export class BatchTransport {
    *   Gateway 的 ApiKeyGuard 需要验证 x-api-key header
    * - flush 是同步方法，确保在 beforeunload 事件中能可靠执行
    */
-  private flush(): void {
-    /* 如果队列为空，无需 flush */
-    if (this.queue.length === 0) {
+  private flush(force: boolean = false): void {
+    /* 避免递归 flush */
+    if (this.isFlushing) {
       return;
     }
 
@@ -164,36 +178,72 @@ export class BatchTransport {
       this.timer = null;
     }
 
-    /**
-     * 取出队列中的所有事件并清空队列
-     * splice(0) 移除所有元素并返回它们，队列变为空数组
-     */
-    const batch = this.queue.splice(0);
+    this.isFlushing = true;
 
-    /* 将事件数组序列化为 JSON 字符串 */
-    const payload = JSON.stringify(batch);
-
-    /**
-     * 使用 fetch API 发送数据
-     * fetch 支持自定义 header，可以携带 x-api-key
-     * Gateway 的 ApiKeyGuard 会验证此 header
-     */
-    fetch(this.endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,  /* 携带 API Key 进行身份验证 */
-      },
-      body: payload,
-      keepalive: true,  /* keepalive 允许在页面卸载后继续发送 */
-      credentials: 'omit',  /* 不发送 Cookie，避免 CORS credentials 模式 */
-    }).catch(() => {
+    try {
       /**
-       * fetch 失败时 fallback 到 XHR
-       * XHR 也支持自定义 header，可以携带 x-api-key
+       * 执行 flush 前钩子。
+       * 典型场景：错误去重器在这里把 60 秒内累积的重复错误计数
+       * 转换成补偿事件并追加到当前批次。
        */
-      sendViaXHR(this.endpoint, payload, this.apiKey);
-    });
+      for (const hook of this.beforeFlushHooks) {
+        try {
+          hook(force);
+        } catch {
+          /* 单个钩子失败不影响后续发送 */
+        }
+      }
+
+      /* 如果队列为空，无需 flush */
+      if (this.queue.length === 0) {
+        return;
+      }
+
+      /**
+       * 取出队列中的所有事件并清空队列
+       * splice(0) 移除所有元素并返回它们，队列变为空数组
+       */
+      const batch = this.queue.splice(0);
+
+      /* 将事件数组序列化为 JSON 字符串 */
+      const payload = JSON.stringify(batch);
+
+      /**
+       * 使用 fetch API 发送数据
+       * fetch 支持自定义 header，可以携带 x-api-key
+       * Gateway 的 ApiKeyGuard 会验证此 header
+       */
+      fetch(this.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,  /* 携带 API Key 进行身份验证 */
+        },
+        body: payload,
+        keepalive: true,  /* keepalive 允许在页面卸载后继续发送 */
+        credentials: 'omit',  /* 不发送 Cookie，避免 CORS credentials 模式 */
+      }).catch(() => {
+        /**
+         * fetch 失败时 fallback 到 XHR
+         * XHR 也支持自定义 header，可以携带 x-api-key
+         */
+        sendViaXHR(this.endpoint, payload, this.apiKey);
+      });
+    } finally {
+      this.isFlushing = false;
+    }
+  }
+
+  /**
+   * 注册 flush 前钩子
+   *
+   * 上层模块可在每次 flush 前把自己暂存在内存中的补偿事件
+   * 追加到当前批次中，例如 60 秒防抖期间累积的重复错误计数。
+   *
+   * @param hook - flush 前执行的同步钩子
+   */
+  public registerBeforeFlushHook(hook: (force: boolean) => void): void {
+    this.beforeFlushHooks.push(hook);
   }
 
   /**
@@ -208,7 +258,7 @@ export class BatchTransport {
    */
   public destroy(): void {
     /* 强制 flush 队列中剩余的事件 */
-    this.flush();
+    this.flush(true);
 
     /* 移除 beforeunload 事件监听器 */
     window.removeEventListener('beforeunload', this.onBeforeUnload);

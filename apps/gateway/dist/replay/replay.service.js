@@ -35,10 +35,16 @@ let ReplayService = class ReplayService {
        RETURNING *`, [sessionId, appId, JSON.stringify(events), errorCount, duration]);
         return result.rows[0];
     }
-    async getBySessionId(sessionId) {
-        const result = await this.pg.query('SELECT * FROM replay_sessions WHERE session_id = $1', [sessionId]);
+    async getBySessionId(sessionId, appId) {
+        const result = await this.pg.query(`SELECT *
+       FROM replay_sessions
+       WHERE session_id = $1
+         AND ($2::text IS NULL OR app_id = $2)
+       LIMIT 1`, [sessionId, appId ?? null]);
         if (result.rows.length === 0) {
-            throw new common_1.NotFoundException(`未找到会话 ID 为 ${sessionId} 的录像记录`);
+            throw new common_1.NotFoundException(appId
+                ? `未找到应用 ${appId} 下会话 ID 为 ${sessionId} 的录像记录`
+                : `未找到会话 ID 为 ${sessionId} 的录像记录`);
         }
         return result.rows[0];
     }

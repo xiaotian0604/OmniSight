@@ -43,8 +43,8 @@ let ReplayController = class ReplayController {
             sessionId: body.sessionId,
         };
     }
-    async getReplay(sessionId) {
-        return this.replayService.getBySessionId(sessionId);
+    async getReplay(sessionId, appId) {
+        return this.replayService.getBySessionId(sessionId, appId);
     }
     async listReplays(appId, from, to, limit, offset) {
         return this.replayService.list(appId, parsePositiveInt(limit, 20, 200), parseNonNegativeInt(offset, 0), from, to);
@@ -81,8 +81,9 @@ __decorate([
     (0, swagger_1.ApiResponse)({ status: 200, description: '返回录像数据' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: '录像不存在' }),
     __param(0, (0, common_1.Param)('sessionId')),
+    __param(1, (0, common_1.Query)('appId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], ReplayController.prototype, "getReplay", null);
 __decorate([

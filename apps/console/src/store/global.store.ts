@@ -91,7 +91,11 @@ function getDefaultTimeRange(): TimeRange {
  * @returns 持久化的 appId 或默认值
  */
 function getPersistedAppId(): string {
-  return localStorage.getItem('omnisight-app-id') || 'default';
+  if (typeof window === 'undefined') {
+    return 'default';
+  }
+
+  return window.localStorage.getItem('omnisight-app-id') || 'default';
 }
 
 /* ================================================================
@@ -138,7 +142,9 @@ export const useGlobalStore = create<GlobalStore>((set) => ({
    * @param appId - 新的项目 ID
    */
   setAppId: (appId: string) => {
-    localStorage.setItem('omnisight-app-id', appId);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('omnisight-app-id', appId);
+    }
     set({ appId });
   },
 

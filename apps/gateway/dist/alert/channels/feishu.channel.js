@@ -64,7 +64,7 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
         return !!this.config.webhook && this.config.webhook.length > 0;
     }
     async send(payload) {
-        const timestamp = Date.now();
+        const timestamp = Math.floor(Date.now() / 1000);
         try {
             if (!this.isAvailable()) {
                 this.logger.warn('飞书渠道未配置 Webhook，跳过发送');
@@ -89,8 +89,8 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
                 },
                 body: JSON.stringify(message),
             });
-            const result = await response.json();
-            if (response.ok && result.code === 0) {
+            const result = await response.json().catch(() => null);
+            if (response.ok && result?.code === 0) {
                 this.logger.log(`飞书告警发送成功: ${payload.fingerprint}`);
                 return {
                     success: true,
@@ -99,7 +99,7 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
                 };
             }
             else {
-                const errorMsg = result.msg || `HTTP ${response.status}`;
+                const errorMsg = result?.msg || `HTTP ${response.status}`;
                 this.logger.error(`飞书告警发送失败: ${errorMsg}`);
                 return {
                     success: false,
@@ -132,6 +132,10 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
             elements: [
                 {
                     tag: 'markdown',
+                    content: `**应用**\n${this.escapeMarkdown(payload.appId)}`,
+                },
+                {
+                    tag: 'markdown',
                     content: `**错误信息**\n${this.escapeMarkdown(payload.message)}`,
                 },
                 {
@@ -140,11 +144,15 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
                 },
                 {
                     tag: 'markdown',
-                    content: `**发生次数**: ${payload.count} 次\n**影响用户**: ${payload.affectedUsers || '未知'} 人`,
+                    content: `**发生次数**: ${payload.count} 次\n**影响用户**: ${payload.affectedUsers ?? 0} 人`,
                 },
                 {
                     tag: 'markdown',
                     content: `**时间窗口**\n${this.formatTimeWindow(payload.windowStart, payload.windowEnd)}`,
+                },
+                {
+                    tag: 'markdown',
+                    content: `**首次发生**\n${this.formatDateTime(payload.firstSeen)}\n**最近发生**\n${this.formatDateTime(payload.lastSeen)}`,
                 },
             ],
         };
@@ -159,7 +167,7 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
             elements: [
                 {
                     tag: 'plain_text',
-                    content: `指纹: ${payload.fingerprint} | ${new Date().toLocaleString('zh-CN')}`,
+                    content: `指纹: ${payload.fingerprint} | 发送时间: ${new Date().toLocaleString('zh-CN')}`,
                 },
             ],
         });
@@ -179,8 +187,8 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
     }
     generateSignature(timestamp, secret) {
         const stringToSign = `${timestamp}\n${secret}`;
-        const hmac = crypto.createHmac('sha256', secret);
-        hmac.update(stringToSign);
+        const hmac = crypto.createHmac('sha256', stringToSign);
+        hmac.update('');
         return hmac.digest('base64');
     }
     formatTimeWindow(start, end) {
@@ -191,6 +199,16 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
             minute: '2-digit',
         });
         return `${format(start)} ~ ${format(end)}`;
+    }
+    formatDateTime(date) {
+        return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        });
     }
     escapeMarkdown(text) {
         return text.replace(/([*_`\[\]])/g, '\\$1');

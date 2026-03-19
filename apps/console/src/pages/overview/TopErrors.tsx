@@ -9,8 +9,8 @@
  * 表格列说明：
  * - 错误消息 (message): 错误的描述文本，截断显示
  * - 文件名 (filename): 发生错误的源文件
- * - 发生次数 (count): 在时间范围内的总发生次数
- * - 影响用户 (affectedUsers): 受影响的独立用户数
+ * - 发生次数 (count): 在时间范围内按 occurrences 聚合后的真实发生次数
+ * - 影响用户 (affectedUsers): 受影响的独立 audience 数
  * - 最近发生 (lastSeen): 最后一次发生的时间
  *
  * 交互行为：
@@ -20,7 +20,8 @@
  * 面试讲解要点：
  * - 错误聚合是通过 fingerprint（指纹）实现的
  * - 指纹 = hash(message + stack 第一帧)，相同错误会被归为一组
- * - 影响用户数通过 COUNT(DISTINCT session_id) 计算
+ * - count 由后端按 occurrences 聚合，反映真实报错次数
+ * - affectedUsers 优先按 userId 去重，没有 userId 时退化为 session_id
  */
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -48,7 +49,7 @@ export function TopErrors() {
   const navigate = useNavigate();
 
   /** 从全局 store 读取时间范围 */
-  const { timeRange } = useGlobalStore();
+  const { appId, timeRange } = useGlobalStore();
 
   /**
    * 使用 React Query 请求错误列表
@@ -63,6 +64,7 @@ export function TopErrors() {
   const { data: errors, isLoading } = useQuery<ErrorGroup[]>({
     queryKey: [
       'top-errors',
+      appId,
       timeRange.start.toISOString(),
       timeRange.end.toISOString(),
     ],
@@ -128,8 +130,18 @@ export function TopErrors() {
           <tr>
             <th>错误消息</th>
             <th>文件</th>
-            <th style={{ textAlign: 'right' }}>次数</th>
-            <th style={{ textAlign: 'right' }}>影响用户</th>
+            <th
+              style={{ textAlign: 'right' }}
+              title="真实发生次数；同一 session 内 60 秒防抖折叠的重复错误会通过 occurrences 计入"
+            >
+              次数
+            </th>
+            <th
+              style={{ textAlign: 'right' }}
+              title="优先按 userId 去重，没有 userId 时按 session 去重"
+            >
+              影响人数
+            </th>
             <th style={{ textAlign: 'right' }}>最近发生</th>
           </tr>
         </thead>

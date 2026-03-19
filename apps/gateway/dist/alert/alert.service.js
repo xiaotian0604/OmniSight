@@ -24,6 +24,13 @@ const ioredis_1 = __importDefault(require("ioredis"));
 const database_module_1 = require("../database.module");
 const alert_types_1 = require("./types/alert.types");
 const ALERT_SENT_PREFIX = 'alert:sent:';
+const ERROR_OCCURRENCES_SQL = `
+CASE
+  WHEN COALESCE(payload->>'occurrences', '') ~ '^[0-9]+$'
+    THEN GREATEST((payload->>'occurrences')::int, 1)
+  ELSE 1
+END`;
+const AFFECTED_AUDIENCE_SQL = `COUNT(DISTINCT COALESCE(NULLIF(payload->>'userId', ''), session_id::text))`;
 let AlertService = AlertService_1 = class AlertService {
     constructor(pg, redis, configService) {
         this.pg = pg;
@@ -35,9 +42,7 @@ let AlertService = AlertService_1 = class AlertService {
             windowMinutes: this.configService.get('ALERT_WINDOW_MINUTES', 5),
             cooldownMinutes: this.configService.get('ALERT_COOLDOWN_MINUTES', 30),
         };
-        console.log(this.ruleConfig, "<==== ruleConfig");
         this.alertEnabled = this.configService.get('ALERT_ENABLED', 'false').toLowerCase() === 'true';
-        console.log(this.alertEnabled, "<=== alertEnabled");
         this.logger.log(`告警服务初始化: enabled=${this.alertEnabled}, ` +
             `threshold=${this.ruleConfig.threshold}, ` +
             `window=${this.ruleConfig.windowMinutes}min, ` +
@@ -46,47 +51,55 @@ let AlertService = AlertService_1 = class AlertService {
     async scanAndAlert(channels) {
         if (!this.alertEnabled) {
             this.logger.debug('告警功能未启用，跳过扫描');
-            return { scanResult: null, sentCount: 0, skippedCount: 0 };
+            return { scanResult: null, sentCount: 0, skippedCount: 0, failedCount: 0 };
         }
         const availableChannels = channels.filter((c) => c.isAvailable());
         if (availableChannels.length === 0) {
             this.logger.warn('没有可用的告警渠道，跳过扫描');
-            return { scanResult: null, sentCount: 0, skippedCount: 0 };
+            return { scanResult: null, sentCount: 0, skippedCount: 0, failedCount: 0 };
         }
         this.logger.log('开始扫描高频错误...');
         const scanResult = await this.scanHighFrequencyErrors();
         if (scanResult.errors.length === 0) {
             this.logger.log('未检测到高频错误');
-            return { scanResult, sentCount: 0, skippedCount: 0 };
+            return { scanResult, sentCount: 0, skippedCount: 0, failedCount: 0 };
         }
         this.logger.log(`检测到 ${scanResult.errors.length} 个高频错误，开始处理...`);
         let sentCount = 0;
         let skippedCount = 0;
+        let failedCount = 0;
         for (const error of scanResult.errors) {
-            const canSend = await this.checkCooldown('default-app', error.fingerprint);
+            const canSend = await this.checkCooldown(error.appId, error.fingerprint);
             if (!canSend) {
                 this.logger.debug(`错误 ${error.fingerprint} 在冷却期内，跳过告警`);
                 skippedCount++;
                 continue;
             }
             const payload = await this.buildAlertPayload(error, scanResult);
-            await this.sendToChannels(payload, availableChannels);
-            await this.recordAlertSent('default-app', error.fingerprint);
+            const results = await this.sendToChannels(payload, availableChannels);
+            const hasSuccess = results.some((result) => result.success);
+            if (!hasSuccess) {
+                await this.releaseCooldown(error.appId, error.fingerprint);
+                failedCount++;
+                continue;
+            }
+            await this.recordAlertSent(error.appId, error.fingerprint);
             sentCount++;
         }
-        this.logger.log(`告警处理完成: 发送 ${sentCount} 条，跳过 ${skippedCount} 条`);
-        return { scanResult, sentCount, skippedCount };
+        this.logger.log(`告警处理完成: 发送 ${sentCount} 条，失败 ${failedCount} 条，跳过 ${skippedCount} 条`);
+        return { scanResult, sentCount, skippedCount, failedCount };
     }
     async scanHighFrequencyErrors() {
         const windowEnd = new Date();
         const windowStart = new Date(windowEnd.getTime() - this.ruleConfig.windowMinutes * 60 * 1000);
         const query = `
       SELECT
+        app_id AS app_id,
         fingerprint,
-        payload->>'message' AS message,
-        payload->>'filename' AS filename,
-        COUNT(*) AS count,
-        COUNT(DISTINCT session_id) AS affected_users,
+        (ARRAY_AGG(payload->>'message' ORDER BY ts DESC))[1] AS message,
+        (ARRAY_AGG(payload->>'filename' ORDER BY ts DESC))[1] AS filename,
+        SUM(${ERROR_OCCURRENCES_SQL}) AS count,
+        ${AFFECTED_AUDIENCE_SQL} AS affected_users,
         MIN(ts) AS first_seen,
         MAX(ts) AS last_seen
       FROM events
@@ -94,8 +107,8 @@ let AlertService = AlertService_1 = class AlertService {
         AND fingerprint IS NOT NULL
         AND ts >= $1
         AND ts <= $2
-      GROUP BY fingerprint, payload->>'message', payload->>'filename'
-      HAVING COUNT(*) >= $3
+      GROUP BY app_id, fingerprint
+      HAVING SUM(${ERROR_OCCURRENCES_SQL}) >= $3
       ORDER BY count DESC
       LIMIT 50
     `;
@@ -105,6 +118,7 @@ let AlertService = AlertService_1 = class AlertService {
             this.ruleConfig.threshold,
         ]);
         const errors = result.rows.map((row) => ({
+            appId: row.app_id,
             fingerprint: row.fingerprint,
             message: row.message || 'Unknown error',
             filename: row.filename,
@@ -129,14 +143,19 @@ let AlertService = AlertService_1 = class AlertService {
         const key = `${ALERT_SENT_PREFIX}${appId}:${fingerprint}`;
         await this.redis.expire(key, this.ruleConfig.cooldownMinutes * 60);
     }
+    async releaseCooldown(appId, fingerprint) {
+        const key = `${ALERT_SENT_PREFIX}${appId}:${fingerprint}`;
+        await this.redis.del(key);
+    }
     async buildAlertPayload(error, scanResult) {
         const gitInfo = await this.getGitInfoForError(error);
         return {
-            appId: 'default-app',
+            appId: error.appId,
             fingerprint: error.fingerprint,
             message: error.message,
             filename: error.filename,
             count: error.count,
+            affectedUsers: error.affectedUsers,
             windowStart: scanResult.windowStart,
             windowEnd: scanResult.windowEnd,
             firstSeen: error.firstSeen,
@@ -154,10 +173,11 @@ let AlertService = AlertService_1 = class AlertService {
         SELECT git_commit, git_author
         FROM sourcemaps
         WHERE filename = $1
+          AND app_id = $2
         ORDER BY created_at DESC
         LIMIT 1
       `;
-            const result = await this.pg.query(query, [error.filename]);
+            const result = await this.pg.query(query, [error.filename, error.appId]);
             if (result.rows.length > 0) {
                 return {
                     gitCommit: result.rows[0].git_commit,

@@ -20,7 +20,8 @@
  * - 错误聚合的核心是 fingerprint（指纹），由 SDK 端生成
  * - 指纹算法：hash(message + stack 第一帧)
  * - 后端使用 GROUP BY fingerprint 进行聚合查询
- * - 影响用户数通过 COUNT(DISTINCT session_id) 计算
+ * - count 由后端按 occurrences 聚合，表示真实发生次数
+ * - affectedUsers 优先按 userId 去重，没有 userId 时退化为 session_id
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -44,7 +45,7 @@ import { EmptyState } from '@/components/EmptyState';
  */
 export default function ErrorsPage() {
   const navigate = useNavigate();
-  const { timeRange } = useGlobalStore();
+  const { appId, timeRange } = useGlobalStore();
 
   /**
    * 排序方式
@@ -62,6 +63,7 @@ export default function ErrorsPage() {
   const { data: errors, isLoading } = useQuery<ErrorGroup[]>({
     queryKey: [
       'errors-list',
+      appId,
       timeRange.start.toISOString(),
       timeRange.end.toISOString(),
       sortBy,
@@ -90,7 +92,7 @@ export default function ErrorsPage() {
       <div className="page-header">
         <div className="page-header-info">
           <h2>错误管理</h2>
-          <p>按指纹聚合的错误列表，点击查看详情和堆栈信息</p>
+          <p>按指纹聚合的错误列表，次数为真实发生次数，影响人数按去重 audience 计算</p>
         </div>
 
         {/* 排序切换按钮组 */}
@@ -137,8 +139,18 @@ export default function ErrorsPage() {
                 <tr>
                   <th>错误消息</th>
                   <th>文件</th>
-                  <th style={{ textAlign: 'right' }}>次数</th>
-                  <th style={{ textAlign: 'right' }}>影响用户</th>
+                  <th
+                    style={{ textAlign: 'right' }}
+                    title="真实发生次数；同一 session 内 60 秒防抖折叠的重复错误会通过 occurrences 计入"
+                  >
+                    次数
+                  </th>
+                  <th
+                    style={{ textAlign: 'right' }}
+                    title="优先按 userId 去重，没有 userId 时按 session 去重"
+                  >
+                    影响人数
+                  </th>
                   <th>首次发生</th>
                   <th>最近发生</th>
                 </tr>

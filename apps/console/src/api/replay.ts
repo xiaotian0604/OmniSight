@@ -143,6 +143,7 @@ export async function getReplayBySessionId(sessionId: string): Promise<ReplayDet
   const { data } = await apiClient.get<{
     session_id: string;
     events: unknown[];
+    app_id: string;
     error_count: number;
     duration: number;
     created_at: string;

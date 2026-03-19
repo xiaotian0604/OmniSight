@@ -20,7 +20,7 @@
  * 3. 签名验证：使用密钥生成签名（本项目采用此方式）
  *
  * 签名算法：
- * 1. timestamp = 当前时间戳（毫秒）
+ * 1. timestamp = 当前 Unix 时间戳（秒）
  * 2. string_to_sign = timestamp + "\n" + secret
  * 3. sign = Base64(HmacSHA256(string_to_sign, secret))
  * 4. 请求中携带 timestamp 和 sign
@@ -125,7 +125,8 @@ export class FeishuChannel implements AlertChannel {
    * @returns 发送结果
    */
   async send(payload: AlertPayload): Promise<AlertResult> {
-    const timestamp = Date.now();
+    // 飞书需要秒级时间戳（不是毫秒！）
+    const timestamp = Math.floor(Date.now() / 1000);
 
     try {
       if (!this.isAvailable()) {
@@ -161,9 +162,9 @@ export class FeishuChannel implements AlertChannel {
         body: JSON.stringify(message),
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
 
-      if (response.ok && result.code === 0) {
+      if (response.ok && result?.code === 0) {
         this.logger.log(`飞书告警发送成功: ${payload.fingerprint}`);
         return {
           success: true,
@@ -171,7 +172,7 @@ export class FeishuChannel implements AlertChannel {
           timestamp: new Date(),
         };
       } else {
-        const errorMsg = result.msg || `HTTP ${response.status}`;
+        const errorMsg = result?.msg || `HTTP ${response.status}`;
         this.logger.error(`飞书告警发送失败: ${errorMsg}`);
         return {
           success: false,
@@ -228,6 +229,10 @@ export class FeishuChannel implements AlertChannel {
       elements: [
         {
           tag: 'markdown',
+          content: `**应用**\n${this.escapeMarkdown(payload.appId)}`,
+        },
+        {
+          tag: 'markdown',
           content: `**错误信息**\n${this.escapeMarkdown(payload.message)}`,
         },
         {
@@ -236,11 +241,15 @@ export class FeishuChannel implements AlertChannel {
         },
         {
           tag: 'markdown',
-          content: `**发生次数**: ${payload.count} 次\n**影响用户**: ${payload.affectedUsers || '未知'} 人`,
+          content: `**发生次数**: ${payload.count} 次\n**影响用户**: ${payload.affectedUsers ?? 0} 人`,
         },
         {
           tag: 'markdown',
           content: `**时间窗口**\n${this.formatTimeWindow(payload.windowStart, payload.windowEnd)}`,
+        },
+        {
+          tag: 'markdown',
+          content: `**首次发生**\n${this.formatDateTime(payload.firstSeen)}\n**最近发生**\n${this.formatDateTime(payload.lastSeen)}`,
         },
       ],
     };
@@ -257,7 +266,7 @@ export class FeishuChannel implements AlertChannel {
       elements: [
         {
           tag: 'plain_text',
-          content: `指纹: ${payload.fingerprint} | ${new Date().toLocaleString('zh-CN')}`,
+          content: `指纹: ${payload.fingerprint} | 发送时间: ${new Date().toLocaleString('zh-CN')}`,
         },
       ],
     });
@@ -299,23 +308,29 @@ export class FeishuChannel implements AlertChannel {
    * 生成飞书签名
    *
    * 签名算法：
-   * 1. 拼接时间戳和密钥：timestamp + "\n" + secret
-   * 2. 使用 HmacSHA256 计算签名
-   * 3. Base64 编码
+ * 1. 拼接时间戳和密钥：timestamp + "\n" + secret
+ * 2. 使用 string_to_sign 作为 HMAC key，对空字符串做 HmacSHA256
+ * 3. Base64 编码
    *
    * 为什么需要签名？
    * - 防止伪造请求：只有知道密钥的人才能生成有效签名
    * - 防止重放攻击：时间戳确保请求的时效性
    *
-   * @param timestamp - 当前时间戳（毫秒）
+   * @param timestamp - 当前时间戳（秒！飞书要求秒级）
    * @param secret - 签名密钥
    * @returns Base64 编码的签名字符串
    */
   private generateSignature(timestamp: number, secret: string): string {
     const stringToSign = `${timestamp}\n${secret}`;
 
-    const hmac = crypto.createHmac('sha256', secret);
-    hmac.update(stringToSign);
+    /**
+     * 飞书自定义机器人签名的关键点：
+     * - HMAC key 是 string_to_sign
+     * - message 为空字符串
+     * 之前把 secret 当作 key 会导致 sign 校验恒失败。
+     */
+    const hmac = crypto.createHmac('sha256', stringToSign);
+    hmac.update('');
 
     return hmac.digest('base64');
   }
@@ -338,6 +353,25 @@ export class FeishuChannel implements AlertChannel {
         minute: '2-digit',
       });
     return `${format(start)} ~ ${format(end)}`;
+  }
+
+  /**
+   * 格式化完整时间
+   *
+   * 用于在告警消息中展示首发/最近发生时间，避免只看统计窗口而缺少上下文。
+   *
+   * @param date - 时间
+   * @returns 本地化时间字符串
+   */
+  private formatDateTime(date: Date): string {
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
   }
 
   /**

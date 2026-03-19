@@ -7,6 +7,6 @@ export declare class ReplayController {
         success: boolean;
         sessionId: string;
     }>;
-    getReplay(sessionId: string): Promise<any>;
+    getReplay(sessionId: string, appId?: string): Promise<any>;
     listReplays(appId: string, from?: string, to?: string, limit?: string, offset?: string): Promise<any[]>;
 }

@@ -35,6 +35,26 @@ import { Pool } from 'pg';
 import { PG_POOL } from '../database.module';
 
 type ErrorSortBy = 'count' | 'lastSeen';
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ERROR_OCCURRENCES_SQL = `
+CASE
+  WHEN COALESCE(payload->>'occurrences', '') ~ '^[0-9]+$'
+    THEN GREATEST((payload->>'occurrences')::int, 1)
+  ELSE 1
+END`;
+const ERROR_WEIGHT_SQL = `
+CASE
+  WHEN type = 'error' THEN ${ERROR_OCCURRENCES_SQL}
+  ELSE 0
+END`;
+const EVENT_WEIGHT_SQL = `
+CASE
+  WHEN type = 'error' THEN ${ERROR_OCCURRENCES_SQL}
+  ELSE 1
+END`;
+const AFFECTED_AUDIENCE_SQL =
+  `COUNT(DISTINCT COALESCE(NULLIF(payload->>'userId', ''), session_id::text))`;
 
 @Injectable()
 export class QueryService {
@@ -88,10 +108,10 @@ export class QueryService {
       const result = await this.pg.query(
         `SELECT
            time_bucket($4::interval, ts) AS bucket,
-           COUNT(*) FILTER (WHERE type = 'error') AS error_count,
-           COUNT(*) AS total_count,
+           SUM(${ERROR_WEIGHT_SQL}) AS error_count,
+           SUM(${EVENT_WEIGHT_SQL}) AS total_count,
            ROUND(
-             COUNT(*) FILTER (WHERE type = 'error')::numeric / GREATEST(COUNT(*), 1) * 100, 2
+             SUM(${ERROR_WEIGHT_SQL})::numeric / GREATEST(SUM(${EVENT_WEIGHT_SQL}), 1) * 100, 2
            ) AS error_rate
          FROM events
          WHERE app_id = $1
@@ -125,10 +145,10 @@ export class QueryService {
         const result = await this.pg.query(
           `SELECT
              date_trunc($4, ts) AS bucket,
-             COUNT(*) FILTER (WHERE type = 'error') AS error_count,
-             COUNT(*) AS total_count,
+             SUM(${ERROR_WEIGHT_SQL}) AS error_count,
+             SUM(${EVENT_WEIGHT_SQL}) AS total_count,
              ROUND(
-               COUNT(*) FILTER (WHERE type = 'error')::numeric / GREATEST(COUNT(*), 1) * 100, 2
+               SUM(${ERROR_WEIGHT_SQL})::numeric / GREATEST(SUM(${EVENT_WEIGHT_SQL}), 1) * 100, 2
              ) AS error_rate
            FROM events
            WHERE app_id = $1
@@ -181,8 +201,8 @@ export class QueryService {
     const result = await this.pg.query(
       `SELECT
          app_id AS "appId",
-         COUNT(*) FILTER (WHERE type = 'error') AS "errorCount",
-         COUNT(*) AS "totalCount",
+         SUM(${ERROR_WEIGHT_SQL}) AS "errorCount",
+         SUM(${EVENT_WEIGHT_SQL}) AS "totalCount",
          MAX(ts) AS "lastSeen"
        FROM events
        GROUP BY app_id
@@ -227,10 +247,10 @@ export class QueryService {
     const result = await this.pg.query(
       `SELECT
          fingerprint,
-         payload->>'message' AS message,
-         payload->>'filename' AS filename,
-         COUNT(*)              AS "count",
-         COUNT(DISTINCT session_id) AS "affectedUsers",
+         (ARRAY_AGG(payload->>'message' ORDER BY ts DESC))[1] AS message,
+         (ARRAY_AGG(payload->>'filename' ORDER BY ts DESC))[1] AS filename,
+         SUM(${ERROR_OCCURRENCES_SQL}) AS "count",
+         ${AFFECTED_AUDIENCE_SQL} AS "affectedUsers",
          MAX(ts)               AS "lastSeen",
          MIN(ts)               AS "firstSeen"
        FROM events
@@ -238,7 +258,7 @@ export class QueryService {
          AND type = 'error'
          AND ts >= $2::timestamptz
          AND ts <= $3::timestamptz
-       GROUP BY fingerprint, payload->>'message', payload->>'filename'
+       GROUP BY fingerprint
        ORDER BY ${orderBy}
        LIMIT $4
        OFFSET $5`,
@@ -289,7 +309,7 @@ export class QueryService {
       event.session_id,
       event.ts,
     );
-    const replaySessionId = await this.getReplaySessionId(event.session_id);
+    const replaySessionId = await this.getReplaySessionId(event.session_id, event.app_id);
     const git = await this.getGitInfo(event.payload?.filename, event.app_id);
 
     return {
@@ -318,8 +338,11 @@ export class QueryService {
   }
 
   private async findErrorEvent(identifier: string, appId?: string) {
-    let event: any = null;
-
+    /**
+     * console 错误详情页的路由参数语义是 fingerprint。
+     * 只有当调用方明确传入 UUID 形态的字符串时，才尝试按 events.id 查询；
+     * 否则直接按 fingerprint 分支处理，避免把普通字符串投给 PostgreSQL uuid 列。
+     */
     if (appId) {
       const byFingerprint = await this.pg.query(
         `SELECT *
@@ -337,17 +360,17 @@ export class QueryService {
       }
     }
 
-    try {
-      const byId = await this.pg.query(
-        'SELECT * FROM events WHERE id = $1 AND type = $2 LIMIT 1',
-        [identifier, 'error'],
-      );
+    if (!UUID_PATTERN.test(identifier)) {
+      return null;
+    }
 
-      if (byId.rows[0]) {
-        return byId.rows[0];
-      }
-    } catch (err) {
-      console.warn('findErrorEvent: UUID 查询失败，可能不是 UUID 格式:', identifier);
+    const byId = await this.pg.query(
+      'SELECT * FROM events WHERE id = $1 AND type = $2 LIMIT 1',
+      [identifier, 'error'],
+    );
+
+    if (byId.rows[0]) {
+      return byId.rows[0];
     }
 
     return null;
@@ -356,8 +379,8 @@ export class QueryService {
   private async getErrorAggregate(appId: string, fingerprint: string) {
     const result = await this.pg.query(
       `SELECT
-         COUNT(*) AS count,
-         COUNT(DISTINCT session_id) AS "affectedUsers",
+         SUM(${ERROR_OCCURRENCES_SQL}) AS count,
+         ${AFFECTED_AUDIENCE_SQL} AS "affectedUsers",
          MIN(ts) AS "firstSeen",
          MAX(ts) AS "lastSeen"
        FROM events
@@ -377,10 +400,17 @@ export class QueryService {
     };
   }
 
-  private async getReplaySessionId(sessionId: string): Promise<string | undefined> {
+  private async getReplaySessionId(
+    sessionId: string,
+    appId?: string,
+  ): Promise<string | undefined> {
     const result = await this.pg.query(
-      'SELECT session_id FROM replay_sessions WHERE session_id = $1 LIMIT 1',
-      [sessionId],
+      `SELECT session_id
+       FROM replay_sessions
+       WHERE session_id = $1
+         AND ($2::text IS NULL OR app_id = $2)
+       LIMIT 1`,
+      [sessionId, appId ?? null],
     );
 
     return result.rows[0]?.session_id;

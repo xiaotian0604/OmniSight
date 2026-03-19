@@ -13,5 +13,6 @@ export declare class FeishuChannel implements AlertChannel {
     private getHeaderColor;
     private generateSignature;
     private formatTimeWindow;
+    private formatDateTime;
     private escapeMarkdown;
 }
