@@ -27,7 +27,7 @@ __decorate([
 ], UploadSourcemapDto.prototype, "appId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: '应用版本号（git sha 或 tag）',
+        description: '应用版本号（git sha 或 tag，必须与 SDK init 时传入的 release 一致）',
         example: 'abc123',
     }),
     (0, class_validator_1.IsString)(),

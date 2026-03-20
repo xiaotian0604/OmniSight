@@ -153,7 +153,7 @@ export class QueryController {
    * - 会话 ID（可跳转到关联的录像回放）
    * - 完整的 payload（包含 filename, lineno, colno 等）
    *
-   * @param id - 事件 ID（UUID，来自 events 表的 id 字段）
+   * @param id - 错误指纹（主路径语义）或兼容性的事件 UUID
    *
    * @returns 单个事件的完整记录，如果不存在返回 null
    */
@@ -161,11 +161,11 @@ export class QueryController {
   @ApiOperation({
     summary: '错误详情',
     description:
-      '根据事件 ID 获取单个错误的完整信息，包括堆栈、页面 URL、UA 等。',
+      '根据错误指纹获取错误详情；兼容 UUID 形式的事件 ID 查询。',
   })
   @ApiParam({
     name: 'id',
-    description: '事件 ID（UUID）',
+    description: '错误指纹（推荐）或事件 ID（UUID）',
   })
   @ApiResponse({ status: 200, description: '返回错误详情' })
   async getErrorById(

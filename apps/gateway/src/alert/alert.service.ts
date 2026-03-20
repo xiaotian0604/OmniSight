@@ -55,6 +55,7 @@ import {
   HighFrequencyErrorScanResult,
 } from './types/alert.types';
 import { AlertChannel } from './channels/channel.interface';
+import { SourcemapService } from '../sourcemap/sourcemap.service';
 
 /**
  * Redis 告警记录 key 前缀
@@ -100,6 +101,7 @@ export class AlertService {
     @Inject(PG_POOL) private readonly pg: Pool,
     @Inject(REDIS) private readonly redis: Redis,
     private readonly configService: ConfigService,
+    private readonly sourcemapService: SourcemapService,
   ) {
     this.ruleConfig = {
       threshold: this.configService.get<number>('ALERT_THRESHOLD', 100),
@@ -243,7 +245,10 @@ export class AlertService {
         app_id AS app_id,
         fingerprint,
         (ARRAY_AGG(payload->>'message' ORDER BY ts DESC))[1] AS message,
+        (ARRAY_AGG(payload->>'release' ORDER BY ts DESC))[1] AS release,
         (ARRAY_AGG(payload->>'filename' ORDER BY ts DESC))[1] AS filename,
+        (ARRAY_AGG(payload->>'lineno' ORDER BY ts DESC))[1] AS lineno,
+        (ARRAY_AGG(payload->>'colno' ORDER BY ts DESC))[1] AS colno,
         SUM(${ERROR_OCCURRENCES_SQL}) AS count,
         ${AFFECTED_AUDIENCE_SQL} AS affected_users,
         MIN(ts) AS first_seen,
@@ -269,7 +274,10 @@ export class AlertService {
       appId: row.app_id,
       fingerprint: row.fingerprint,
       message: row.message || 'Unknown error',
+      release: row.release || undefined,
       filename: row.filename,
+      lineno: this.parseOptionalNumber(row.lineno),
+      colno: this.parseOptionalNumber(row.colno),
       count: parseInt(row.count, 10),
       affectedUsers: parseInt(row.affected_users, 10),
       firstSeen: row.first_seen,
@@ -363,13 +371,22 @@ export class AlertService {
     error: HighFrequencyError,
     scanResult: HighFrequencyErrorScanResult,
   ): Promise<AlertPayload> {
-    const gitInfo = await this.getGitInfoForError(error);
+    const resolvedSource = await this.sourcemapService.resolveLocation({
+      appId: error.appId,
+      release: error.release,
+      filename: error.filename,
+      lineno: error.lineno,
+      colno: error.colno,
+    });
 
     return {
       appId: error.appId,
       fingerprint: error.fingerprint,
       message: error.message,
       filename: error.filename,
+      lineno: error.lineno,
+      colno: error.colno,
+      release: error.release || resolvedSource?.release,
       count: error.count,
       affectedUsers: error.affectedUsers,
       windowStart: scanResult.windowStart,
@@ -377,54 +394,15 @@ export class AlertService {
       firstSeen: error.firstSeen,
       lastSeen: error.lastSeen,
       level: AlertLevel.ERROR,
-      ...gitInfo,
+      gitCommit: resolvedSource?.gitCommit,
+      gitAuthor: resolvedSource?.gitAuthor,
+      gitMessage: resolvedSource?.gitMessage,
+      gitBranch: resolvedSource?.gitBranch,
+      resolvedFile: resolvedSource?.originalFile,
+      resolvedLine: resolvedSource?.originalLine,
+      resolvedColumn: resolvedSource?.originalColumn,
+      sourceContext: resolvedSource?.sourceContext,
     };
-  }
-
-  /**
-   * 获取错误关联的 Git 信息
-   *
-   * 根据错误文件名查询 sourcemaps 表，获取对应的 Git 提交信息。
-   *
-   * 查询逻辑：
-   * 1. 根据文件名匹配 sourcemaps 记录
-   * 2. 返回最新的 git_commit 和 git_author
-   *
-   * TODO: 当前为简化实现，后续可以根据错误发生时的版本号精确匹配
-   *
-   * @param error - 高频错误信息
-   * @returns Git 信息（可能为空）
-   */
-  private async getGitInfoForError(
-    error: HighFrequencyError,
-  ): Promise<{ gitCommit?: string; gitAuthor?: string }> {
-    if (!error.filename) {
-      return {};
-    }
-
-    try {
-      const query = `
-        SELECT git_commit, git_author
-        FROM sourcemaps
-        WHERE filename = $1
-          AND app_id = $2
-        ORDER BY created_at DESC
-        LIMIT 1
-      `;
-
-      const result = await this.pg.query(query, [error.filename, error.appId]);
-
-      if (result.rows.length > 0) {
-        return {
-          gitCommit: result.rows[0].git_commit,
-          gitAuthor: result.rows[0].git_author,
-        };
-      }
-    } catch (err) {
-      this.logger.warn(`获取 Git 信息失败: ${err}`);
-    }
-
-    return {};
   }
 
   /**
@@ -480,5 +458,20 @@ export class AlertService {
   ): Promise<AlertResult[]> {
     this.logger.log(`手动触发告警: fingerprint=${payload.fingerprint}`);
     return this.sendToChannels(payload, channels);
+  }
+
+  private parseOptionalNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+
+    return undefined;
   }
 }

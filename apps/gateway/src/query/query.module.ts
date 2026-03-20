@@ -24,8 +24,10 @@
 import { Module } from '@nestjs/common';
 import { QueryController } from './query.controller';
 import { QueryService } from './query.service';
+import { SourcemapModule } from '../sourcemap/sourcemap.module';
 
 @Module({
+  imports: [SourcemapModule],
   controllers: [QueryController],
   providers: [QueryService],
 })

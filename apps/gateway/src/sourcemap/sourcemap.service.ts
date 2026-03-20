@@ -35,9 +35,15 @@
  * ===============================================================
  */
 
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Pool } from 'pg';
 import { PG_POOL } from '../database.module';
+import * as fs from 'fs';
+import { TraceMap, originalPositionFor, sourceContentFor } from '@jridgewell/trace-mapping';
+import {
+  ResolvedSourceLocation,
+  SourceContextLine,
+} from './sourcemap.types';
 
 /**
  * Git 信息接口
@@ -50,8 +56,30 @@ export interface GitInfo {
   gitBranch?: string;
 }
 
+interface SourcemapRecord {
+  app_id: string;
+  version: string;
+  filename: string;
+  map_path: string;
+  git_commit?: string | null;
+  git_author?: string | null;
+  git_message?: string | null;
+  git_branch?: string | null;
+}
+
+interface CachedTraceMap {
+  mtimeMs: number;
+  traceMap: TraceMap;
+}
+
+const SOURCE_CONTEXT_RADIUS = 3;
+const MAX_TRACE_MAP_CACHE_SIZE = 50;
+
 @Injectable()
 export class SourcemapService {
+  private readonly logger = new Logger(SourcemapService.name);
+  private readonly traceMapCache = new Map<string, CachedTraceMap>();
+
   constructor(
     /**
      * 注入 PostgreSQL 连接池
@@ -172,5 +200,194 @@ export class SourcemapService {
       [filename],
     );
     return result.rows[0] || null;
+  }
+
+  /**
+   * 根据错误事件中的压缩后位置还原源码位置
+   *
+   * 匹配策略：
+   * 1. 优先使用 appId + release + artifact 精确命中 sourcemap
+   * 2. 如果 SDK 没传 release，则退化到 appId + artifact 的最新记录
+   * 3. 仅在命中对应 sourcemap 后才执行 source map 反查，避免串版本
+   *
+   * 还原结果中会同时附带：
+   * - 命中的 release / artifact
+   * - Git 元信息
+   * - 原始源码文件、行列号
+   * - sourcesContent 中截出的前后文代码片段
+   */
+  async resolveLocation(params: {
+    appId: string;
+    release?: string;
+    filename?: string;
+    lineno?: number;
+    colno?: number;
+  }): Promise<ResolvedSourceLocation | null> {
+    const artifact = this.normalizeArtifactFilename(params.filename);
+    if (!artifact) {
+      return null;
+    }
+
+    const record = await this.findMatchingRecord(
+      params.appId,
+      artifact,
+      params.release,
+    );
+
+    if (!record) {
+      return null;
+    }
+
+    const resolved: ResolvedSourceLocation = {
+      release: record.version,
+      artifact: record.filename,
+      gitCommit: record.git_commit || undefined,
+      gitAuthor: record.git_author || undefined,
+      gitMessage: record.git_message || undefined,
+      gitBranch: record.git_branch || undefined,
+    };
+
+    if (
+      typeof params.lineno !== 'number' ||
+      !Number.isFinite(params.lineno) ||
+      params.lineno <= 0
+    ) {
+      return resolved;
+    }
+
+    try {
+      const traceMap = this.loadTraceMap(record.map_path);
+      const original = originalPositionFor(traceMap, {
+        line: params.lineno,
+        // 浏览器上报的 colno 通常按 1 开始，source map 查询列号按 0 开始。
+        column:
+          typeof params.colno === 'number' && Number.isFinite(params.colno)
+            ? Math.max(params.colno - 1, 0)
+            : 0,
+      });
+
+      if (!original.source || !original.line) {
+        return resolved;
+      }
+
+      resolved.originalFile = original.source;
+      resolved.originalLine = original.line;
+      resolved.originalColumn =
+        typeof original.column === 'number' ? original.column + 1 : undefined;
+
+      const sourceContent = sourceContentFor(traceMap, original.source);
+      if (sourceContent) {
+        resolved.sourceContext = this.extractSourceContext(
+          sourceContent,
+          original.line,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `SourceMap 解析失败: appId=${params.appId}, release=${params.release || 'n/a'}, artifact=${artifact}, error=${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    return resolved;
+  }
+
+  private async findMatchingRecord(
+    appId: string,
+    artifact: string,
+    release?: string,
+  ): Promise<SourcemapRecord | null> {
+    if (release) {
+      const exact = await this.pg.query<SourcemapRecord>(
+        `SELECT *
+         FROM sourcemaps
+         WHERE app_id = $1
+           AND version = $2
+           AND filename = $3
+         LIMIT 1`,
+        [appId, release, artifact],
+      );
+
+      return exact.rows[0] || null;
+    }
+
+    const latest = await this.pg.query<SourcemapRecord>(
+      `SELECT *
+       FROM sourcemaps
+       WHERE app_id = $1
+         AND filename = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [appId, artifact],
+    );
+
+    return latest.rows[0] || null;
+  }
+
+  private normalizeArtifactFilename(filename?: string): string | null {
+    if (!filename) {
+      return null;
+    }
+
+    const raw = filename.trim();
+    if (!raw) {
+      return null;
+    }
+
+    let pathname = raw;
+    try {
+      pathname = new URL(raw).pathname;
+    } catch {
+      pathname = raw;
+    }
+
+    const cleanPath = decodeURIComponent(pathname).split('#')[0].split('?')[0];
+    const segments = cleanPath.split('/').filter(Boolean);
+
+    return segments[segments.length - 1] || cleanPath || null;
+  }
+
+  private loadTraceMap(mapPath: string): TraceMap {
+    const stat = fs.statSync(mapPath);
+    const cached = this.traceMapCache.get(mapPath);
+    if (cached && cached.mtimeMs === stat.mtimeMs) {
+      return cached.traceMap;
+    }
+
+    const rawMap = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
+    const traceMap = new TraceMap(rawMap);
+
+    this.traceMapCache.set(mapPath, {
+      mtimeMs: stat.mtimeMs,
+      traceMap,
+    });
+
+    if (this.traceMapCache.size > MAX_TRACE_MAP_CACHE_SIZE) {
+      const firstKey = this.traceMapCache.keys().next().value;
+      if (firstKey) {
+        this.traceMapCache.delete(firstKey);
+      }
+    }
+
+    return traceMap;
+  }
+
+  private extractSourceContext(
+    sourceContent: string,
+    targetLine: number,
+  ): SourceContextLine[] {
+    const lines = sourceContent.split(/\r?\n/);
+    const start = Math.max(targetLine - SOURCE_CONTEXT_RADIUS, 1);
+    const end = Math.min(targetLine + SOURCE_CONTEXT_RADIUS, lines.length);
+    const context: SourceContextLine[] = [];
+
+    for (let line = start; line <= end; line++) {
+      context.push({
+        lineNumber: line,
+        content: lines[line - 1] || '',
+        isTarget: line === targetLine,
+      });
+    }
+
+    return context;
   }
 }

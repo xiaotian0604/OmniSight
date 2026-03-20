@@ -1,19 +1,22 @@
 import { Pool } from 'pg';
+import { SourcemapService } from '../sourcemap/sourcemap.service';
 type ErrorSortBy = 'count' | 'lastSeen';
 export declare class QueryService {
     private readonly pg;
-    constructor(pg: Pool);
+    private readonly sourcemapService;
+    constructor(pg: Pool, sourcemapService: SourcemapService);
     getErrorRateSeries(appId: string, from: string, to: string, interval?: string): Promise<any[]>;
     private intervalToTruncPrecision;
     getAppsList(): Promise<any[]>;
     getErrorsGrouped(appId: string, from: string, to: string, limit?: number, sortBy?: ErrorSortBy, offset?: number): Promise<any[]>;
     getErrorDetail(identifier: string, appId?: string): Promise<{
         fingerprint: any;
-        message: any;
-        stack: any;
-        filename: any;
-        lineno: any;
-        colno: any;
+        message: string;
+        stack: string | undefined;
+        filename: string | undefined;
+        lineno: number | undefined;
+        colno: number | undefined;
+        release: string | undefined;
         count: number;
         affectedUsers: number;
         firstSeen: any;
@@ -30,10 +33,12 @@ export declare class QueryService {
             data?: undefined;
         } | null>[];
         replaySessionId: string | undefined;
+        sourceMap: import("../sourcemap/sourcemap.types").ResolvedSourceLocation | null;
         tags: {
-            gitBranch?: any;
-            gitAuthor?: any;
-            gitCommit?: any;
+            gitBranch?: string | undefined;
+            gitAuthor?: string | undefined;
+            gitCommit?: string | undefined;
+            release?: string | undefined;
             ua?: any;
             url?: any;
             appId: any;
@@ -43,9 +48,10 @@ export declare class QueryService {
     private findErrorEvent;
     private getErrorAggregate;
     private getReplaySessionId;
-    private getGitInfo;
     private getBreadcrumbs;
     private mapBreadcrumb;
+    private readStringPayloadField;
+    private readNumberPayloadField;
     getApiMetrics(appId: string, from: string, to: string, limit?: number): Promise<any[]>;
     getVitalsSeries(appId: string, from: string, to: string, name?: string, interval?: string): Promise<any[]>;
 }

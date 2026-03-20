@@ -5,6 +5,7 @@ export declare class IngestEventDto {
     ts: number;
     url?: string;
     ua?: string;
+    release?: string;
     payload?: Record<string, any>;
     fingerprint?: string;
     occurrences?: number;

@@ -33,6 +33,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { Pool } from 'pg';
 import { PG_POOL } from '../database.module';
+import { SourcemapService } from '../sourcemap/sourcemap.service';
 
 type ErrorSortBy = 'count' | 'lastSeen';
 const UUID_PATTERN =
@@ -64,6 +65,7 @@ export class QueryService {
      * 所有查询通过连接池执行，自动管理连接的获取和释放
      */
     @Inject(PG_POOL) private readonly pg: Pool,
+    private readonly sourcemapService: SourcemapService,
   ) {}
 
   /**
@@ -310,29 +312,44 @@ export class QueryService {
       event.ts,
     );
     const replaySessionId = await this.getReplaySessionId(event.session_id, event.app_id);
-    const git = await this.getGitInfo(event.payload?.filename, event.app_id);
+    const release = this.readStringPayloadField(event.payload, 'release');
+    const filename = this.readStringPayloadField(event.payload, 'filename');
+    const lineno = this.readNumberPayloadField(event.payload, 'lineno');
+    const colno = this.readNumberPayloadField(event.payload, 'colno');
+    const resolvedSource = await this.sourcemapService.resolveLocation({
+      appId: event.app_id,
+      release: release || undefined,
+      filename: filename || undefined,
+      lineno: lineno || undefined,
+      colno: colno || undefined,
+    });
 
     return {
       fingerprint: event.fingerprint || identifier,
-      message: event.payload?.message || 'Unknown error',
-      stack: event.payload?.stack,
-      filename: event.payload?.filename,
-      lineno: event.payload?.lineno,
-      colno: event.payload?.colno,
+      message: this.readStringPayloadField(event.payload, 'message') || 'Unknown error',
+      stack: this.readStringPayloadField(event.payload, 'stack') || undefined,
+      filename: filename || undefined,
+      lineno: lineno || undefined,
+      colno: colno || undefined,
+      release: release || resolvedSource?.release,
       count: aggregate.count,
       affectedUsers: aggregate.affectedUsers,
       firstSeen: aggregate.firstSeen,
       lastSeen: aggregate.lastSeen,
       breadcrumbs,
       replaySessionId,
+      sourceMap: resolvedSource,
       tags: {
         appId: event.app_id,
         sessionId: event.session_id,
         ...(event.url ? { url: event.url } : {}),
         ...(event.ua ? { ua: event.ua } : {}),
-        ...(git?.commit ? { gitCommit: git.commit } : {}),
-        ...(git?.author ? { gitAuthor: git.author } : {}),
-        ...(git?.branch ? { gitBranch: git.branch } : {}),
+        ...(release || resolvedSource?.release
+          ? { release: release || resolvedSource?.release! }
+          : {}),
+        ...(resolvedSource?.gitCommit ? { gitCommit: resolvedSource.gitCommit } : {}),
+        ...(resolvedSource?.gitAuthor ? { gitAuthor: resolvedSource.gitAuthor } : {}),
+        ...(resolvedSource?.gitBranch ? { gitBranch: resolvedSource.gitBranch } : {}),
       },
     };
   }
@@ -416,33 +433,6 @@ export class QueryService {
     return result.rows[0]?.session_id;
   }
 
-  private async getGitInfo(filename?: string, appId?: string) {
-    if (!filename) {
-      return null;
-    }
-
-    const gitResult = await this.pg.query(
-      `SELECT git_commit, git_author, git_message, git_branch
-       FROM sourcemaps
-       WHERE filename = $1
-         AND ($2::text IS NULL OR app_id = $2)
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [filename, appId ?? null],
-    );
-
-    if (gitResult.rows.length === 0) {
-      return null;
-    }
-
-    return {
-      commit: gitResult.rows[0].git_commit,
-      author: gitResult.rows[0].git_author,
-      message: gitResult.rows[0].git_message,
-      branch: gitResult.rows[0].git_branch,
-    };
-  }
-
   private async getBreadcrumbs(appId: string, sessionId: string, eventTime: string) {
     const result = await this.pg.query(
       `SELECT type, payload, ts
@@ -506,6 +496,31 @@ export class QueryService {
       };
     }
 
+    return null;
+  }
+
+  private readStringPayloadField(
+    payload: Record<string, unknown> | null | undefined,
+    key: string,
+  ): string | null {
+    const value = payload?.[key];
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  }
+
+  private readNumberPayloadField(
+    payload: Record<string, unknown> | null | undefined,
+    key: string,
+  ): number | null {
+    const value = payload?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
     return null;
   }
 

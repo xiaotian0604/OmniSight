@@ -29,5 +29,6 @@ import { SourcemapService } from './sourcemap.service';
 @Module({
   controllers: [SourcemapController],
   providers: [SourcemapService],
+  exports: [SourcemapService],
 })
 export class SourcemapModule {}

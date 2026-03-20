@@ -13,6 +13,7 @@ const alert_service_1 = require("./alert.service");
 const alert_worker_1 = require("./alert.worker");
 const feishu_channel_1 = require("./channels/feishu.channel");
 const alert_constants_1 = require("./alert.constants");
+const sourcemap_module_1 = require("../sourcemap/sourcemap.module");
 let AlertModule = class AlertModule {
 };
 exports.AlertModule = AlertModule;
@@ -20,6 +21,7 @@ exports.AlertModule = AlertModule = __decorate([
     (0, common_1.Module)({
         imports: [
             schedule_1.ScheduleModule.forRoot(),
+            sourcemap_module_1.SourcemapModule,
         ],
         providers: [
             alert_service_1.AlertService,

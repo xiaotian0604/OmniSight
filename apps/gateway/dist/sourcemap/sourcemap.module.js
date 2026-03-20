@@ -17,6 +17,7 @@ exports.SourcemapModule = SourcemapModule = __decorate([
     (0, common_1.Module)({
         controllers: [sourcemap_controller_1.SourcemapController],
         providers: [sourcemap_service_1.SourcemapService],
+        exports: [sourcemap_service_1.SourcemapService],
     })
 ], SourcemapModule);
 //# sourceMappingURL=sourcemap.module.js.map

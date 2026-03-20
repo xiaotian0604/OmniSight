@@ -41,6 +41,9 @@ export interface AlertPayload {
     fingerprint: string;
     message: string;
     filename?: string;
+    lineno?: number;
+    colno?: number;
+    release?: string;
     count: number;
     affectedUsers?: number;
     windowStart: Date;
@@ -49,6 +52,16 @@ export interface AlertPayload {
     lastSeen: Date;
     gitCommit?: string;
     gitAuthor?: string;
+    gitMessage?: string;
+    gitBranch?: string;
+    resolvedFile?: string;
+    resolvedLine?: number;
+    resolvedColumn?: number;
+    sourceContext?: Array<{
+        lineNumber: number;
+        content: string;
+        isTarget: boolean;
+    }>;
     level: AlertLevel;
 }
 export interface AlertResult {
@@ -68,6 +81,9 @@ export interface HighFrequencyError {
     fingerprint: string;
     message: string;
     filename?: string;
+    lineno?: number;
+    colno?: number;
+    release?: string;
     count: number;
     affectedUsers: number;
     firstSeen: Date;

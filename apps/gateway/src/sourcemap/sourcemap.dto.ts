@@ -74,7 +74,7 @@ export class UploadSourcemapDto {
    * 必须是安全的路径字符
    */
   @ApiProperty({
-    description: '应用版本号（git sha 或 tag）',
+    description: '应用版本号（git sha 或 tag，必须与 SDK init 时传入的 release 一致）',
     example: 'abc123',
   })
   @IsString()

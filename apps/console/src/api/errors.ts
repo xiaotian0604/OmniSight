@@ -72,13 +72,34 @@ export interface ErrorDetail {
   filename?: string;
   lineno?: number;
   colno?: number;
+  release?: string;
   count: number;
   affectedUsers: number;
   lastSeen: string;
   firstSeen: string;
   breadcrumbs: Breadcrumb[];
   replaySessionId?: string;
+  sourceMap?: SourceMapResolution;
   tags: Record<string, string>;
+}
+
+export interface SourceContextLine {
+  lineNumber: number;
+  content: string;
+  isTarget: boolean;
+}
+
+export interface SourceMapResolution {
+  release: string;
+  artifact: string;
+  originalFile?: string;
+  originalLine?: number;
+  originalColumn?: number;
+  sourceContext?: SourceContextLine[];
+  gitCommit?: string;
+  gitAuthor?: string;
+  gitMessage?: string;
+  gitBranch?: string;
 }
 
 interface RawErrorDetail {
@@ -88,12 +109,14 @@ interface RawErrorDetail {
   filename?: string;
   lineno?: number;
   colno?: number;
+  release?: string;
   count: number | string;
   affectedUsers: number | string;
   lastSeen: string;
   firstSeen: string;
   breadcrumbs: Breadcrumb[];
   replaySessionId?: string;
+  sourceMap?: SourceMapResolution;
   tags: Record<string, string>;
 }
 

@@ -15,4 +15,9 @@ export declare class FeishuChannel implements AlertChannel {
     private formatTimeWindow;
     private formatDateTime;
     private escapeMarkdown;
+    private formatCompiledLocation;
+    private formatResolvedLocation;
+    private formatSourceContext;
+    private sanitizeCodeFence;
+    private truncateCodeLine;
 }

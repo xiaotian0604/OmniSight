@@ -3,14 +3,16 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { AlertPayload, AlertResult, HighFrequencyErrorScanResult } from './types/alert.types';
 import { AlertChannel } from './channels/channel.interface';
+import { SourcemapService } from '../sourcemap/sourcemap.service';
 export declare class AlertService {
     private readonly pg;
     private readonly redis;
     private readonly configService;
+    private readonly sourcemapService;
     private readonly logger;
     private readonly ruleConfig;
     private readonly alertEnabled;
-    constructor(pg: Pool, redis: Redis, configService: ConfigService);
+    constructor(pg: Pool, redis: Redis, configService: ConfigService, sourcemapService: SourcemapService);
     scanAndAlert(channels: AlertChannel[]): Promise<{
         scanResult: HighFrequencyErrorScanResult | null;
         sentCount: number;
@@ -22,7 +24,7 @@ export declare class AlertService {
     private recordAlertSent;
     private releaseCooldown;
     private buildAlertPayload;
-    private getGitInfoForError;
     private sendToChannels;
     triggerAlert(payload: AlertPayload, channels: AlertChannel[]): Promise<AlertResult[]>;
+    private parseOptionalNumber;
 }

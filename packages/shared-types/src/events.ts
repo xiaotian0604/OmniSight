@@ -103,6 +103,20 @@ export interface BaseEvent {
    * 格式遵循语义化版本规范（SemVer），如 "0.1.0"。
    */
   sdkVersion: string;
+
+  /**
+   * 发布版本（可选）
+   * 由接入方在 SDK init 时显式传入，建议使用 git commit sha、构建号或发布版本号。
+   *
+   * 作用：
+   * - 与 CI 上传的 SourceMap 版本进行精确匹配
+   * - 避免同名 bundle 在不同版本之间串用 SourceMap
+   *
+   * 示例：
+   * - "9f3c2ab"
+   * - "web-2026.03.20-1"
+   */
+  release?: string;
 }
 
 // ========================= 错误事件 =========================

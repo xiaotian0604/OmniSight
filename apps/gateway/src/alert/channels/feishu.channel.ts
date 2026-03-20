@@ -237,7 +237,15 @@ export class FeishuChannel implements AlertChannel {
         },
         {
           tag: 'markdown',
-          content: `**文件位置**\n${payload.filename || '未知'}`,
+          content:
+            `**Release**\n${payload.release ? this.escapeMarkdown(payload.release) : '未提供'}\n\n` +
+            `**压缩后位置**\n${this.formatCompiledLocation(payload)}`,
+        },
+        {
+          tag: 'markdown',
+          content:
+            `**源码定位**\n${this.formatResolvedLocation(payload)}` +
+            `\n\n**打包产物**\n${payload.filename ? this.escapeMarkdown(payload.filename) : '未知'}`,
         },
         {
           tag: 'markdown',
@@ -254,10 +262,20 @@ export class FeishuChannel implements AlertChannel {
       ],
     };
 
-    if (payload.gitCommit || payload.gitAuthor) {
+    if (payload.sourceContext && payload.sourceContext.length > 0) {
       card.elements.push({
         tag: 'markdown',
-        content: `**Git 提交**\n${payload.gitCommit || ''}${payload.gitAuthor ? ` (@${payload.gitAuthor})` : ''}`,
+        content: `**源码片段**\n${this.formatSourceContext(payload.sourceContext)}`,
+      });
+    }
+
+    if (payload.gitCommit || payload.gitAuthor || payload.gitBranch || payload.gitMessage) {
+      card.elements.push({
+        tag: 'markdown',
+        content:
+          `**Git 提交**\n${payload.gitCommit ? this.escapeMarkdown(payload.gitCommit) : '未知'}${payload.gitAuthor ? ` (@${this.escapeMarkdown(payload.gitAuthor)})` : ''}` +
+          `${payload.gitBranch ? `\n**分支**\n${this.escapeMarkdown(payload.gitBranch)}` : ''}` +
+          `${payload.gitMessage ? `\n**提交信息**\n${this.escapeMarkdown(payload.gitMessage)}` : ''}`,
       });
     }
 
@@ -385,5 +403,60 @@ export class FeishuChannel implements AlertChannel {
    */
   private escapeMarkdown(text: string): string {
     return text.replace(/([*_`\[\]])/g, '\\$1');
+  }
+
+  private formatCompiledLocation(payload: AlertPayload): string {
+    if (!payload.filename) {
+      return '未知';
+    }
+
+    const line =
+      typeof payload.lineno === 'number' ? payload.lineno.toString() : '?';
+    const column =
+      typeof payload.colno === 'number' ? payload.colno.toString() : '?';
+
+    return this.escapeMarkdown(`${payload.filename}:${line}:${column}`);
+  }
+
+  private formatResolvedLocation(payload: AlertPayload): string {
+    if (!payload.resolvedFile) {
+      return '未命中 SourceMap';
+    }
+
+    const line =
+      typeof payload.resolvedLine === 'number'
+        ? payload.resolvedLine.toString()
+        : '?';
+    const column =
+      typeof payload.resolvedColumn === 'number'
+        ? payload.resolvedColumn.toString()
+        : '?';
+
+    return this.escapeMarkdown(`${payload.resolvedFile}:${line}:${column}`);
+  }
+
+  private formatSourceContext(
+    sourceContext: NonNullable<AlertPayload['sourceContext']>,
+  ): string {
+    const snippet = sourceContext
+      .map((line) => {
+        const prefix = line.isTarget ? '>' : ' ';
+        const lineNumber = line.lineNumber.toString().padStart(4, ' ');
+        return `${prefix}${lineNumber} | ${this.truncateCodeLine(this.sanitizeCodeFence(line.content))}`;
+      })
+      .join('\n');
+
+    return `\`\`\`ts\n${snippet}\n\`\`\``;
+  }
+
+  private sanitizeCodeFence(text: string): string {
+    return text.replace(/```/g, "'''");
+  }
+
+  private truncateCodeLine(text: string, maxLength: number = 240): string {
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.slice(0, maxLength - 3)}...`;
   }
 }

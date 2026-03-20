@@ -80,6 +80,8 @@ export class SourcemapController {
    * @param body - 请求体
    * @param body.appId - 项目标识
    * @param body.version - 应用版本号（建议使用 git commit sha 或 tag）
+   *   注意：该值需要与业务项目初始化 SDK 时传入的 release 完全一致，
+   *   否则错误上报时无法精确命中对应版本的 SourceMap。
    * @param body.filename - 原始 JS 文件名（如 main.js）
    * @param body.mapContent - SourceMap 文件内容（JSON 字符串）
    *

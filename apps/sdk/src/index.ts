@@ -11,6 +11,7 @@
  * init({
  *   appId: 'your-app-id',
  *   dsn: 'https://your-gateway.com',
+ *   release: '9f3c2ab', // 与 CI 上传的 sourcemap version 保持一致
  *   sampleRate: 0.1,
  *   enableReplay: true,
  *   privacy: {

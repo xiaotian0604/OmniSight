@@ -16,6 +16,7 @@ exports.QueryService = void 0;
 const common_1 = require("@nestjs/common");
 const pg_1 = require("pg");
 const database_module_1 = require("../database.module");
+const sourcemap_service_1 = require("../sourcemap/sourcemap.service");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ERROR_OCCURRENCES_SQL = `
 CASE
@@ -35,8 +36,9 @@ CASE
 END`;
 const AFFECTED_AUDIENCE_SQL = `COUNT(DISTINCT COALESCE(NULLIF(payload->>'userId', ''), session_id::text))`;
 let QueryService = class QueryService {
-    constructor(pg) {
+    constructor(pg, sourcemapService) {
         this.pg = pg;
+        this.sourcemapService = sourcemapService;
     }
     async getErrorRateSeries(appId, from, to, interval = '5 minutes') {
         try {
@@ -135,28 +137,43 @@ let QueryService = class QueryService {
             };
         const breadcrumbs = await this.getBreadcrumbs(event.app_id, event.session_id, event.ts);
         const replaySessionId = await this.getReplaySessionId(event.session_id, event.app_id);
-        const git = await this.getGitInfo(event.payload?.filename, event.app_id);
+        const release = this.readStringPayloadField(event.payload, 'release');
+        const filename = this.readStringPayloadField(event.payload, 'filename');
+        const lineno = this.readNumberPayloadField(event.payload, 'lineno');
+        const colno = this.readNumberPayloadField(event.payload, 'colno');
+        const resolvedSource = await this.sourcemapService.resolveLocation({
+            appId: event.app_id,
+            release: release || undefined,
+            filename: filename || undefined,
+            lineno: lineno || undefined,
+            colno: colno || undefined,
+        });
         return {
             fingerprint: event.fingerprint || identifier,
-            message: event.payload?.message || 'Unknown error',
-            stack: event.payload?.stack,
-            filename: event.payload?.filename,
-            lineno: event.payload?.lineno,
-            colno: event.payload?.colno,
+            message: this.readStringPayloadField(event.payload, 'message') || 'Unknown error',
+            stack: this.readStringPayloadField(event.payload, 'stack') || undefined,
+            filename: filename || undefined,
+            lineno: lineno || undefined,
+            colno: colno || undefined,
+            release: release || resolvedSource?.release,
             count: aggregate.count,
             affectedUsers: aggregate.affectedUsers,
             firstSeen: aggregate.firstSeen,
             lastSeen: aggregate.lastSeen,
             breadcrumbs,
             replaySessionId,
+            sourceMap: resolvedSource,
             tags: {
                 appId: event.app_id,
                 sessionId: event.session_id,
                 ...(event.url ? { url: event.url } : {}),
                 ...(event.ua ? { ua: event.ua } : {}),
-                ...(git?.commit ? { gitCommit: git.commit } : {}),
-                ...(git?.author ? { gitAuthor: git.author } : {}),
-                ...(git?.branch ? { gitBranch: git.branch } : {}),
+                ...(release || resolvedSource?.release
+                    ? { release: release || resolvedSource?.release }
+                    : {}),
+                ...(resolvedSource?.gitCommit ? { gitCommit: resolvedSource.gitCommit } : {}),
+                ...(resolvedSource?.gitAuthor ? { gitAuthor: resolvedSource.gitAuthor } : {}),
+                ...(resolvedSource?.gitBranch ? { gitBranch: resolvedSource.gitBranch } : {}),
             },
         };
     }
@@ -207,26 +224,6 @@ let QueryService = class QueryService {
          AND ($2::text IS NULL OR app_id = $2)
        LIMIT 1`, [sessionId, appId ?? null]);
         return result.rows[0]?.session_id;
-    }
-    async getGitInfo(filename, appId) {
-        if (!filename) {
-            return null;
-        }
-        const gitResult = await this.pg.query(`SELECT git_commit, git_author, git_message, git_branch
-       FROM sourcemaps
-       WHERE filename = $1
-         AND ($2::text IS NULL OR app_id = $2)
-       ORDER BY created_at DESC
-       LIMIT 1`, [filename, appId ?? null]);
-        if (gitResult.rows.length === 0) {
-            return null;
-        }
-        return {
-            commit: gitResult.rows[0].git_commit,
-            author: gitResult.rows[0].git_author,
-            message: gitResult.rows[0].git_message,
-            branch: gitResult.rows[0].git_branch,
-        };
     }
     async getBreadcrumbs(appId, sessionId, eventTime) {
         const result = await this.pg.query(`SELECT type, payload, ts
@@ -281,6 +278,23 @@ let QueryService = class QueryService {
                 message: row.payload?.message || 'Unknown error',
                 timestamp: row.ts,
             };
+        }
+        return null;
+    }
+    readStringPayloadField(payload, key) {
+        const value = payload?.[key];
+        return typeof value === 'string' && value.length > 0 ? value : null;
+    }
+    readNumberPayloadField(payload, key) {
+        const value = payload?.[key];
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string' && value.trim().length > 0) {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
         }
         return null;
     }
@@ -370,6 +384,7 @@ exports.QueryService = QueryService;
 exports.QueryService = QueryService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)(database_module_1.PG_POOL)),
-    __metadata("design:paramtypes", [pg_1.Pool])
+    __metadata("design:paramtypes", [pg_1.Pool,
+        sourcemap_service_1.SourcemapService])
 ], QueryService);
 //# sourceMappingURL=query.service.js.map

@@ -6,11 +6,12 @@ export declare class QueryController {
     getErrors(appId: string, from: string, to: string, limit?: string, offset?: string, sort?: string): Promise<any[]>;
     getErrorById(id: string, appId?: string): Promise<{
         fingerprint: any;
-        message: any;
-        stack: any;
-        filename: any;
-        lineno: any;
-        colno: any;
+        message: string;
+        stack: string | undefined;
+        filename: string | undefined;
+        lineno: number | undefined;
+        colno: number | undefined;
+        release: string | undefined;
         count: number;
         affectedUsers: number;
         firstSeen: any;
@@ -27,10 +28,12 @@ export declare class QueryController {
             data?: undefined;
         } | null>[];
         replaySessionId: string | undefined;
+        sourceMap: import("../sourcemap/sourcemap.types").ResolvedSourceLocation | null;
         tags: {
-            gitBranch?: any;
-            gitAuthor?: any;
-            gitCommit?: any;
+            gitBranch?: string | undefined;
+            gitAuthor?: string | undefined;
+            gitCommit?: string | undefined;
+            release?: string | undefined;
             ua?: any;
             url?: any;
             appId: any;

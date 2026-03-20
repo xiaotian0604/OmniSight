@@ -10,11 +10,13 @@ exports.QueryModule = void 0;
 const common_1 = require("@nestjs/common");
 const query_controller_1 = require("./query.controller");
 const query_service_1 = require("./query.service");
+const sourcemap_module_1 = require("../sourcemap/sourcemap.module");
 let QueryModule = class QueryModule {
 };
 exports.QueryModule = QueryModule;
 exports.QueryModule = QueryModule = __decorate([
     (0, common_1.Module)({
+        imports: [sourcemap_module_1.SourcemapModule],
         controllers: [query_controller_1.QueryController],
         providers: [query_service_1.QueryService],
     })

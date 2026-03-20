@@ -56,6 +56,8 @@ export interface OmniSightConfig {
   dsn: string;
   /** API Key，用于身份验证，必须在 Gateway 注册的项目 api_key */
   apiKey: string;
+  /** 发布版本号，建议传入 git commit sha / CI build number，用于 SourceMap 精确匹配 */
+  release?: string;
   /** 正常事件的采样率，取值范围 [0, 1]，默认 0.1（10%） */
   sampleRate?: number;
   /** 是否启用 rrweb 用户操作录制，默认 false */
@@ -77,6 +79,8 @@ export interface ResolvedConfig {
   dsn: string;
   /** API Key，用于身份验证 */
   apiKey: string;
+  /** 发布版本号，用于与 Sourcemap 上传记录精确匹配 */
+  release?: string;
   /** 正常事件的采样率（已确定值） */
   sampleRate: number;
   /** 是否启用 rrweb 录制（已确定值） */
@@ -257,6 +261,7 @@ export class Core {
       appId: config.appId,
       dsn: config.dsn,
       apiKey: config.apiKey,  /* API Key 用于身份验证 */
+      release: config.release,
       /* 可选字段使用 ?? 运算符填充默认值 */
       sampleRate: config.sampleRate ?? 0.1,         /* 默认 10% 采样率 */
       enableReplay: config.enableReplay ?? false,    /* 默认不启用录制 */
@@ -329,6 +334,7 @@ export class Core {
       url: typeof location !== 'undefined' ? location.href : '', /* 当前页面 URL */
       ua: typeof navigator !== 'undefined' ? navigator.userAgent : '', /* User-Agent */
       sdkVersion: '0.0.1',                        /* SDK 版本号 */
+      ...(this.config.release ? { release: this.config.release } : {}),
       /* 如果已设置匿名化 userId，附加到事件中 */
       ...(this.userId ? { userId: this.userId } : {}),
     };

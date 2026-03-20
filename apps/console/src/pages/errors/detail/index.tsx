@@ -100,6 +100,13 @@ export default function ErrorDetailPage() {
     );
   }
 
+  const mappedLocation = detail.sourceMap?.originalFile
+    ? `${detail.sourceMap.originalFile}:${detail.sourceMap.originalLine ?? '?'}:${detail.sourceMap.originalColumn ?? '?'}`
+    : null;
+  const rawLocation = detail.filename
+    ? `${detail.filename}:${detail.lineno ?? '?'}:${detail.colno ?? '?'}`
+    : '未知位置';
+
   return (
     <div>
       {/* ==================== 页面顶部：返回按钮 + 错误概要 ==================== */}
@@ -139,6 +146,14 @@ export default function ErrorDetailPage() {
           次数已包含同一 session 内 60 秒防抖窗口中聚合补发的重复错误；影响人数按去重 audience 统计。
         </div>
 
+        {(detail.release || detail.sourceMap?.artifact) && (
+          <div style={{ marginTop: '8px', fontSize: '12px', color: '#8b949e' }}>
+            {detail.release ? `Release: ${detail.release}` : ''}
+            {detail.release && detail.sourceMap?.artifact ? ' | ' : ''}
+            {detail.sourceMap?.artifact ? `Artifact: ${detail.sourceMap.artifact}` : ''}
+          </div>
+        )}
+
         {/* 环境标签 */}
         {detail.tags && Object.keys(detail.tags).length > 0 && (
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
@@ -156,9 +171,49 @@ export default function ErrorDetailPage() {
         <div className="card-header">
           <span className="card-title">堆栈信息</span>
           <span className="card-subtitle">
-            {detail.filename ? `${detail.filename}:${detail.lineno}:${detail.colno}` : '未知位置'}
+            {mappedLocation || rawLocation}
           </span>
         </div>
+
+        {detail.sourceMap?.originalFile && (
+          <div
+            style={{
+              padding: '16px',
+              borderBottom: '1px solid rgba(139, 148, 158, 0.15)',
+              background: 'rgba(56, 139, 253, 0.06)',
+            }}
+          >
+            <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '8px' }}>
+              SourceMap 已命中
+            </div>
+            <div style={{ fontSize: '13px', marginBottom: '8px', wordBreak: 'break-all' }}>
+              源码位置：<strong>{mappedLocation}</strong>
+            </div>
+            <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '12px', wordBreak: 'break-all' }}>
+              压缩后位置：{rawLocation}
+            </div>
+
+            {detail.sourceMap.sourceContext && detail.sourceMap.sourceContext.length > 0 && (
+              <pre
+                style={{
+                  margin: 0,
+                  padding: '12px',
+                  overflowX: 'auto',
+                  background: 'rgba(15, 23, 42, 0.9)',
+                  color: '#e6edf3',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  lineHeight: 1.6,
+                }}
+              >
+                {detail.sourceMap.sourceContext
+                  .map((line) => `${line.isTarget ? '>' : ' '} ${line.lineNumber.toString().padStart(4, ' ')} | ${line.content}`)
+                  .join('\n')}
+              </pre>
+            )}
+          </div>
+        )}
+
         <StackTrace stack={detail.stack} />
       </div>
 

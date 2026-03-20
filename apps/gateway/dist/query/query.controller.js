@@ -110,11 +110,11 @@ __decorate([
     (0, common_1.Get)('errors/:id'),
     (0, swagger_1.ApiOperation)({
         summary: '错误详情',
-        description: '根据事件 ID 获取单个错误的完整信息，包括堆栈、页面 URL、UA 等。',
+        description: '根据错误指纹获取错误详情；兼容 UUID 形式的事件 ID 查询。',
     }),
     (0, swagger_1.ApiParam)({
         name: 'id',
-        description: '事件 ID（UUID）',
+        description: '错误指纹（推荐）或事件 ID（UUID）',
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: '返回错误详情' }),
     __param(0, (0, common_1.Param)('id')),

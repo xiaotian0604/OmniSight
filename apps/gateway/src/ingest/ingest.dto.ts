@@ -121,6 +121,16 @@ export class IngestEventDto {
 
   @ApiPropertyOptional({
     description:
+      '发布版本号（建议使用 git commit sha / CI build number）。' +
+      '用于与已上传的 SourceMap 做精确匹配，避免串版本定位。',
+    example: '9f3c2ab',
+  })
+  @IsOptional()
+  @IsString({ message: 'release 必须是字符串' })
+  release?: string;
+
+  @ApiPropertyOptional({
+    description:
       '事件详细数据（JSON 对象）。不同事件类型有不同的字段结构：' +
       'error 类型包含 message/stack/filename/lineno/colno；' +
       'api 类型包含 method/url/status/duration；' +

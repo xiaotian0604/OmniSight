@@ -43,6 +43,7 @@ import { AlertWorker } from './alert.worker';
 import { AlertChannel } from './channels/channel.interface';
 import { FeishuChannel } from './channels/feishu.channel';
 import { ALERT_CHANNELS } from './alert.constants';
+import { SourcemapModule } from '../sourcemap/sourcemap.module';
 
 /**
  * 告警模块定义
@@ -83,6 +84,7 @@ import { ALERT_CHANNELS } from './alert.constants';
      * - 支持任务持久化（需要额外配置）
      */
     ScheduleModule.forRoot(),
+    SourcemapModule,
   ],
 
   providers: [
