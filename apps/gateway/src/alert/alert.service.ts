@@ -96,6 +96,7 @@ export class AlertService {
    * 通过环境变量 ALERT_ENABLED 控制。
    */
   private readonly alertEnabled: boolean;
+  private readonly consoleBaseUrl?: string;
 
   constructor(
     @Inject(PG_POOL) private readonly pg: Pool,
@@ -106,7 +107,7 @@ export class AlertService {
     this.ruleConfig = {
       threshold: this.configService.get<number>('ALERT_THRESHOLD', 100),
       windowMinutes: this.configService.get<number>('ALERT_WINDOW_MINUTES', 5),
-      cooldownMinutes: this.configService.get<number>(
+      cooldownMinutes: this.configervice.get<number>(
         'ALERT_COOLDOWN_MINUTES',
         30,
       ),
@@ -116,12 +117,16 @@ export class AlertService {
       'ALERT_ENABLED',
       'false',
     ).toLowerCase() === 'true';
+    this.consoleBaseUrl = this.normalizeBaseUrl(
+      this.configService.get<string>('ALERT_CONSOLE_BASE_URL', '').trim(),
+    ) || undefined;
 
     this.logger.log(
       `告警服务初始化: enabled=${this.alertEnabled}, ` +
         `threshold=${this.ruleConfig.threshold}, ` +
         `window=${this.ruleConfig.windowMinutes}min, ` +
-        `cooldown=${this.ruleConfig.cooldownMinutes}min`,
+        `cooldown=${this.ruleConfig.cooldownMinutes}min, ` +
+        `consoleBaseUrl=${this.consoleBaseUrl || 'disabled'}`,
     );
   }
 
@@ -244,6 +249,7 @@ export class AlertService {
       SELECT
         app_id AS app_id,
         fingerprint,
+        (ARRAY_AGG(session_id ORDER BY ts DESC))[1] AS session_id,
         (ARRAY_AGG(payload->>'message' ORDER BY ts DESC))[1] AS message,
         (ARRAY_AGG(payload->>'release' ORDER BY ts DESC))[1] AS release,
         (ARRAY_AGG(payload->>'filename' ORDER BY ts DESC))[1] AS filename,
@@ -274,6 +280,7 @@ export class AlertService {
       appId: row.app_id,
       fingerprint: row.fingerprint,
       message: row.message || 'Unknown error',
+      sessionId: row.session_id || undefined,
       release: row.release || undefined,
       filename: row.filename,
       lineno: this.parseOptionalNumber(row.lineno),
@@ -378,17 +385,25 @@ export class AlertService {
       lineno: error.lineno,
       colno: error.colno,
     });
+    const replaySessionId = error.sessionId
+      ? await this.getReplaySessionId(error.sessionId, error.appId)
+      : undefined;
 
     return {
       appId: error.appId,
       fingerprint: error.fingerprint,
       message: error.message,
+      sessionId: error.sessionId,
       filename: error.filename,
       lineno: error.lineno,
       colno: error.colno,
       release: error.release || resolvedSource?.release,
       count: error.count,
       affectedUsers: error.affectedUsers,
+      detailUrl: this.buildConsoleDetailUrl(error, scanResult),
+      replayUrl: replaySessionId
+        ? this.buildConsoleReplayUrl(replaySessionId, error.appId, scanResult)
+        : undefined,
       windowStart: scanResult.windowStart,
       windowEnd: scanResult.windowEnd,
       firstSeen: error.firstSeen,
@@ -403,6 +418,78 @@ export class AlertService {
       resolvedColumn: resolvedSource?.originalColumn,
       sourceContext: resolvedSource?.sourceContext,
     };
+  }
+
+  private normalizeBaseUrl(url: string): string | null {
+    if (!url) {
+      return null;
+    }
+
+    const normalized = url.replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(normalized)) {
+      return `http://${normalized}`;
+    }
+
+    return normalized;
+  }
+
+  private buildConsoleDetailUrl(
+    error: HighFrequencyError,
+    scanResult: HighFrequencyErrorScanResult,
+  ): string | undefined {
+    if (!this.consoleBaseUrl) {
+      return undefined;
+    }
+
+    try {
+      const url = new URL(
+        `${this.consoleBaseUrl}/errors/${encodeURIComponent(error.fingerprint)}`,
+      );
+      url.searchParams.set('appId', error.appId);
+      url.searchParams.set('from', scanResult.windowStart.toISOString());
+      url.searchParams.set('to', scanResult.windowEnd.toISOString());
+      return url.toString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private buildConsoleReplayUrl(
+    sessionId: string,
+    appId: string,
+    scanResult: HighFrequencyErrorScanResult,
+  ): string | undefined {
+    if (!this.consoleBaseUrl) {
+      return undefined;
+    }
+
+    try {
+      const url = new URL(
+        `${this.consoleBaseUrl}/replay/player/${encodeURIComponent(sessionId)}`,
+      );
+      url.searchParams.set('appId', appId);
+      url.searchParams.set('from', scanResult.windowStart.toISOString());
+      url.searchParams.set('to', scanResult.windowEnd.toISOString());
+      return url.toString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async getReplaySessionId(
+    sessionId: string,
+    appId: string,
+  ): Promise<string | undefined> {
+    const result = await this.pg.query(
+      `SELECT session_id
+       FROM replay_sessions
+       WHERE session_id = $1
+         AND app_id = $2
+       LIMIT 1`,
+      [sessionId, appId],
+    );
+
+    return result.rows[0]?.session_id || undefined;
   }
 
   /**

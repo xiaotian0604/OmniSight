@@ -46,6 +46,7 @@ import {
   AlertChannel,
   FeishuMessage,
   FeishuCard,
+  FeishuCardButton,
 } from './channel.interface';
 
 /**
@@ -279,6 +280,14 @@ export class FeishuChannel implements AlertChannel {
       });
     }
 
+    const actions = this.buildActions(payload);
+    if (actions.length > 0) {
+      card.elements.push({
+        tag: 'action',
+        actions,
+      });
+    }
+
     card.elements.push({
       tag: 'note',
       elements: [
@@ -458,5 +467,35 @@ export class FeishuChannel implements AlertChannel {
       return text;
     }
     return `${text.slice(0, maxLength - 3)}...`;
+  }
+
+  private buildActions(payload: AlertPayload): FeishuCardButton[] {
+    const actions: FeishuCardButton[] = [];
+
+    if (payload.detailUrl) {
+      actions.push({
+        tag: 'button',
+        type: 'primary',
+        url: payload.detailUrl,
+        text: {
+          tag: 'plain_text',
+          content: '查看错误详情',
+        },
+      });
+    }
+
+    if (payload.replayUrl) {
+      actions.push({
+        tag: 'button',
+        type: 'default',
+        url: payload.replayUrl,
+        text: {
+          tag: 'plain_text',
+          content: '查看录像',
+        },
+      });
+    }
+
+    return actions;
   }
 }

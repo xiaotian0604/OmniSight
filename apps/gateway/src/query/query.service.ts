@@ -316,6 +316,7 @@ export class QueryService {
     const filename = this.readStringPayloadField(event.payload, 'filename');
     const lineno = this.readNumberPayloadField(event.payload, 'lineno');
     const colno = this.readNumberPayloadField(event.payload, 'colno');
+    const rawStack = this.readStringPayloadField(event.payload, 'stack') || undefined;
     const resolvedSource = await this.sourcemapService.resolveLocation({
       appId: event.app_id,
       release: release || undefined,
@@ -323,11 +324,18 @@ export class QueryService {
       lineno: lineno || undefined,
       colno: colno || undefined,
     });
+    const mappedStackFrames = await this.sourcemapService.resolveStack({
+      appId: event.app_id,
+      release: release || undefined,
+      stack: rawStack,
+    });
 
     return {
       fingerprint: event.fingerprint || identifier,
       message: this.readStringPayloadField(event.payload, 'message') || 'Unknown error',
-      stack: this.readStringPayloadField(event.payload, 'stack') || undefined,
+      stack: rawStack,
+      rawStack,
+      mappedStackFrames,
       filename: filename || undefined,
       lineno: lineno || undefined,
       colno: colno || undefined,

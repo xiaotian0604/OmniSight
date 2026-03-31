@@ -13,6 +13,8 @@ export declare class QueryService {
         fingerprint: any;
         message: string;
         stack: string | undefined;
+        rawStack: string | undefined;
+        mappedStackFrames: import("../sourcemap/sourcemap.types").MappedStackFrame[];
         filename: string | undefined;
         lineno: number | undefined;
         colno: number | undefined;

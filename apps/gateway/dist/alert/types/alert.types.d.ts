@@ -40,12 +40,15 @@ export interface AlertPayload {
     appId: string;
     fingerprint: string;
     message: string;
+    sessionId?: string;
     filename?: string;
     lineno?: number;
     colno?: number;
     release?: string;
     count: number;
     affectedUsers?: number;
+    detailUrl?: string;
+    replayUrl?: string;
     windowStart: Date;
     windowEnd: Date;
     firstSeen: Date;
@@ -80,6 +83,7 @@ export interface HighFrequencyError {
     appId: string;
     fingerprint: string;
     message: string;
+    sessionId?: string;
     filename?: string;
     lineno?: number;
     colno?: number;

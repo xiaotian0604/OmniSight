@@ -30,10 +30,11 @@
  * - 顶部 Header 显示项目名称和全局时间范围选择器
  * - 时间范围变更会影响所有数据查询（通过 Zustand 全局 store 联动）
  */
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
+import { Routes, Route, NavLink, Navigate, useSearchParams } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
 import { TimeRangePicker } from '@/components/TimeRangePicker';
 import { AppIdSelector } from '@/components/AppIdSelector';
+import { useGlobalStore } from '@/store/global.store';
 
 /**
  * 路由懒加载配置
@@ -82,6 +83,38 @@ function PageLoading() {
   );
 }
 
+function QueryStateSync() {
+  const [searchParams] = useSearchParams();
+  const setAppId = useGlobalStore((state) => state.setAppId);
+  const setTimeRange = useGlobalStore((state) => state.setTimeRange);
+  const searchKey = searchParams.toString();
+
+  useEffect(() => {
+    const appId = searchParams.get('appId');
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+
+    if (appId) {
+      setAppId(appId);
+    }
+
+    if (from && to) {
+      const start = new Date(from);
+      const end = new Date(to);
+
+      if (
+        Number.isFinite(start.getTime()) &&
+        Number.isFinite(end.getTime()) &&
+        start <= end
+      ) {
+        setTimeRange({ start, end });
+      }
+    }
+  }, [searchKey, searchParams, setAppId, setTimeRange]);
+
+  return null;
+}
+
 /**
  * App 主组件
  *
@@ -94,7 +127,9 @@ function PageLoading() {
  */
 export default function App() {
   return (
-    <div className="app-layout">
+    <>
+      <QueryStateSync />
+      <div className="app-layout">
       {/* ==================== 侧栏导航 ==================== */}
       <aside className="sidebar">
         {/* Logo 区域：点击回到首页 */}
@@ -192,6 +227,7 @@ export default function App() {
           </Suspense>
         </div>
       </main>
-    </div>
+      </div>
+    </>
   );
 }

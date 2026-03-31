@@ -176,6 +176,13 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
                     `${payload.gitMessage ? `\n**提交信息**\n${this.escapeMarkdown(payload.gitMessage)}` : ''}`,
             });
         }
+        const actions = this.buildActions(payload);
+        if (actions.length > 0) {
+            card.elements.push({
+                tag: 'action',
+                actions,
+            });
+        }
         card.elements.push({
             tag: 'note',
             elements: [
@@ -265,6 +272,32 @@ let FeishuChannel = FeishuChannel_1 = class FeishuChannel {
             return text;
         }
         return `${text.slice(0, maxLength - 3)}...`;
+    }
+    buildActions(payload) {
+        const actions = [];
+        if (payload.detailUrl) {
+            actions.push({
+                tag: 'button',
+                type: 'primary',
+                url: payload.detailUrl,
+                text: {
+                    tag: 'plain_text',
+                    content: '查看错误详情',
+                },
+            });
+        }
+        if (payload.replayUrl) {
+            actions.push({
+                tag: 'button',
+                type: 'default',
+                url: payload.replayUrl,
+                text: {
+                    tag: 'plain_text',
+                    content: '查看录像',
+                },
+            });
+        }
+        return actions;
     }
 };
 exports.FeishuChannel = FeishuChannel;

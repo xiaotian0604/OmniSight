@@ -20,4 +20,5 @@ export declare class FeishuChannel implements AlertChannel {
     private formatSourceContext;
     private sanitizeCodeFence;
     private truncateCodeLine;
+    private buildActions;
 }

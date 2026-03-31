@@ -50,3 +50,35 @@ export interface ResolvedSourceLocation {
   gitMessage?: string;
   gitBranch?: string;
 }
+
+/**
+ * 结构化的 stack 帧映射结果
+ *
+ * 用途：
+ * - 错误详情页逐帧展示编译后位置与源码位置
+ * - 保留无法命中的帧，避免“只返回成功帧”导致调用链断裂
+ */
+export interface MappedStackFrame {
+  /** 原始 stack 行文本 */
+  raw: string;
+  /** 解析出的函数名（如果存在） */
+  functionName?: string;
+  /** 编译后文件路径 */
+  compiledFile?: string;
+  /** 编译后行号 */
+  compiledLine?: number;
+  /** 编译后列号 */
+  compiledColumn?: number;
+  /** 命中的打包产物名 */
+  artifact?: string;
+  /** 命中的发布版本 */
+  release?: string;
+  /** 原始源码文件路径 */
+  originalFile?: string;
+  /** 原始源码行号（从 1 开始） */
+  originalLine?: number;
+  /** 原始源码列号（从 1 开始） */
+  originalColumn?: number;
+  /** 是否成功完成 SourceMap 命中 */
+  mapped: boolean;
+}

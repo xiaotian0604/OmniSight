@@ -1,0 +1,26 @@
+{
+  "name": "@omnisight/build-tools",
+  "version": "0.0.1",
+  "description": "OmniSight 构建接入工具：Vite 插件 + Sourcemap 上传 CLI",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
+    }
+  },
+  "bin": {
+    "omnisight-upload-sourcemaps": "./cli.js"
+  },
+  "scripts": {
+    "build": "node -e \"console.log('build-tools uses source exports')\"",
+    "dev": "node -e \"console.log('build-tools has no dev server')\"",
+    "lint": "echo 'no lint configured'",
+    "test": "echo 'no tests'",
+    "clean": "echo 'nothing to clean'"
+  }
+}

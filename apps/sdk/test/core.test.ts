@@ -21,6 +21,15 @@ function createCore() {
   });
 }
 
+function createReleaseFallbackCore() {
+  return new Core({
+    appId: '10002',
+    dsn: 'http://localhost:3000',
+    apiKey: 'dev-api-key',
+    sampleRate: 1,
+  });
+}
+
 describe('Core duplicate error aggregation', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -56,6 +65,8 @@ describe('Core duplicate error aggregation', () => {
     resetSession();
     localStorage.clear();
     vi.unstubAllGlobals();
+    delete (globalThis as typeof globalThis & { __OMNISIGHT_RELEASE__?: string })
+      .__OMNISIGHT_RELEASE__;
   });
 
   it('应在防抖窗口结束后补发同错的累计 occurrences', () => {
@@ -128,5 +139,52 @@ describe('Core duplicate error aggregation', () => {
     const aggregatedBatch = JSON.parse(fetchMock.mock.calls[1][1].body as string);
     expect(aggregatedBatch).toHaveLength(1);
     expect(aggregatedBatch[0].occurrences).toBe(1);
+  });
+
+  it('应优先从 globalThis.__OMNISIGHT_RELEASE__ 读取 release', () => {
+    const runtime = globalThis as typeof globalThis & {
+      __OMNISIGHT_RELEASE__?: string;
+    };
+    runtime.__OMNISIGHT_RELEASE__ = 'runtime-release';
+
+    const core = createReleaseFallbackCore();
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+
+    core.capture({
+      type: 'error',
+      message: '读取全局 release',
+      stack: 'Error: 读取全局 release\n    at test.js:3:1',
+    });
+
+    vi.advanceTimersByTime(5_000);
+
+    const firstBatch = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(firstBatch[0].release).toBe('runtime-release');
+
+    core.destroy();
+  });
+
+  it('应在没有显式 release 时回退到 meta 标签', () => {
+    vi.stubGlobal('document', {
+      querySelector: vi.fn(() => ({
+        getAttribute: vi.fn(() => 'meta-release'),
+      })),
+    });
+
+    const core = createReleaseFallbackCore();
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+
+    core.capture({
+      type: 'error',
+      message: '读取 meta release',
+      stack: 'Error: 读取 meta release\n    at test.js:4:1',
+    });
+
+    vi.advanceTimersByTime(5_000);
+
+    const firstBatch = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(firstBatch[0].release).toBe('meta-release');
+
+    core.destroy();
   });
 });

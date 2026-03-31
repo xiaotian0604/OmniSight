@@ -2,11 +2,11 @@
 
 ## 1. 当前实现目标
 
-当前 SourceMap 链路的目标不是“SDK 自动上传构建产物”，而是：
+当前 SourceMap 链路的目标不是“SDK 在浏览器里上传构建产物”，而是：
 
-1. 业务项目接入 SDK 时带上 `release`
-2. CI 把当前版本的 SourceMap 上传到 Gateway
-3. Gateway 在错误详情和告警时做源码反查
+1. 构建阶段自动生成并注入 `release`
+2. 构建完成后自动上传当前版本的 SourceMap 到 Gateway
+3. Gateway 在错误详情和告警时做主错误定位和多帧 stack 反查
 
 这是目前更合理的职责划分。
 
@@ -21,28 +21,44 @@ OmniSight.init({
   appId: '10002',
   dsn: 'http://localhost:3000',
   apiKey: 'dev-api-key-omnisight',
-  release: '9f3c2ab',
   sampleRate: 1,
   enableReplay: true,
 });
 ```
 
-### CI 侧
+如果已经接入 `@omnisight/build-tools` 的 Vite 插件，通常不需要手写 `release`。
 
-构建后上传 Sourcemap：
+### 构建工具侧
+
+Vite 插件示例：
+
+```ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { omniSightVitePlugin } from '@omnisight/build-tools';
+
+export default defineConfig({
+  plugins: [
+    react(),
+    omniSightVitePlugin({
+      appId: '10002',
+      dsn: 'http://localhost:3000',
+      apiKey: 'dev-api-key-omnisight',
+    }),
+  ],
+});
+```
+
+### CI / CLI 侧
+
+构建后也可以显式调用 CLI 上传 Sourcemap：
 
 ```bash
-curl -X POST http://localhost:3000/v1/sourcemap \
-  -H 'Content-Type: application/json' \
-  -H 'x-api-key: dev-api-key-omnisight' \
-  -d '{
-    "appId": "10002",
-    "version": "9f3c2ab",
-    "filename": "index-abc123.js",
-    "mapContent": "{...}",
-    "gitCommit": "9f3c2ab",
-    "gitAuthor": "liuliuwenbo"
-  }'
+npx omnisight-upload-sourcemaps \
+  --app-id 10002 \
+  --dsn http://localhost:3000 \
+  --api-key dev-api-key-omnisight \
+  --dir dist
 ```
 
 关键要求：
@@ -65,7 +81,7 @@ curl -X POST http://localhost:3000/v1/sourcemap \
 
 ## 4. 当前还原结果包含什么
 
-`SourcemapService.resolveLocation()` 当前返回：
+`SourcemapService.resolveLocation()` 当前返回主错误位置摘要：
 
 - `release`
 - `artifact`
@@ -78,6 +94,16 @@ curl -X POST http://localhost:3000/v1/sourcemap \
 - `gitMessage`
 - `gitBranch`
 
+`SourcemapService.resolveStack()` 当前返回结构化多帧映射结果：
+
+- `raw`
+- `functionName`
+- `compiledFile / compiledLine / compiledColumn`
+- `originalFile / originalLine / originalColumn`
+- `artifact`
+- `release`
+- `mapped`
+
 ## 5. Console 错误详情现在能看到什么
 
 1. Release
@@ -85,7 +111,8 @@ curl -X POST http://localhost:3000/v1/sourcemap \
 3. 压缩后位置
 4. 命中的源码位置
 5. 命中的代码片段
-6. 关联 Git 信息（通过 tags 暴露）
+6. 结构化多帧映射栈
+7. 关联 Git 信息（通过 tags 暴露）
 
 ## 6. 飞书告警现在能看到什么
 
@@ -101,29 +128,19 @@ curl -X POST http://localhost:3000/v1/sourcemap \
 8. 影响用户数
 9. 时间窗口
 10. Git 信息
+11. 错误详情 deeplink
+12. Replay deeplink（如果该错误关联到了有效录像）
 
 这比只发一句“某页面报错”更接近可执行的排障消息。
 
 ## 7. 当前链路没做满的地方
 
-### 1. 还原的是“主错误位置”，不是整条 stack
+### 1. 还原已经覆盖常见浏览器栈，但还不是所有运行时格式
 
-目前返回的是：
+当前已支持 Chrome / Node / Firefox 常见 stack 帧的多帧 remap。  
+但像 `eval`、`native`、非常规运行时格式，仍然会降级保留原始帧。
 
-- 原始 `stack`
-- 加上一份 SourceMap 解析结果
-
-不是把 stack 每一帧都重写成源码位置。
-
-### 2. 没有自动上传插件
-
-现在只有接口，没有现成的：
-
-- Vite 插件
-- Webpack 插件
-- 发布 CLI
-
-### 3. Sourcemap 存本地文件系统
+### 2. Sourcemap 存本地文件系统
 
 当前是：
 
@@ -133,11 +150,7 @@ curl -X POST http://localhost:3000/v1/sourcemap \
 
 - S3 / OSS / MinIO
 
-### 4. 告警没有详情页 deeplink
-
-现在飞书告警看得到源码，但没有直接跳到 Console 某条错误详情的链接。
-
-### 5. 代码片段权限控制没有做
+### 3. 代码片段权限控制没有做
 
 如果你要上线到更严谨的环境，后续应该加：
 
@@ -166,7 +179,7 @@ curl -X POST http://localhost:3000/v1/sourcemap \
 
 ## 9. 推荐的下一步增强
 
-1. 提供一个官方 CI 上传脚本或插件
+1. 补 Webpack 官方插件
 2. 增加对象存储版本的 Sourcemap 管理
-3. 增加错误详情 deeplink 到飞书告警
-4. 做整条 stack 多帧 remap
+3. 做更精确的资产映射（manifest 驱动）
+4. 做源码片段权限开关与脱敏策略

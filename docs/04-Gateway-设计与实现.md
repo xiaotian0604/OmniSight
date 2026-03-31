@@ -161,12 +161,14 @@ Worker 从队列消费后做三件事：
 - affectedUsers
 - 时间窗口
 - Git 信息
+- Console deeplink
+- Replay deeplink（存在关联录像时）
 
 ## 9. Gateway 当前边界
 
 1. Worker 里的 UA / Geo enrich 还是占位。
 2. SourceMap 文件当前存在本地，不是对象存储。
-3. 目前是单点错误位置还原，不是整条 stack remap。
+3. 已支持常见浏览器 stack 的多帧 remap，但还不是所有运行时格式的完整调试器级还原。
 4. 没有真正的实时 WebSocket 告警推送。
 
 ## 10. Gateway 相关面试问答

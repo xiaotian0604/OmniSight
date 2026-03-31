@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { ResolvedSourceLocation } from './sourcemap.types';
+import { MappedStackFrame, ResolvedSourceLocation } from './sourcemap.types';
 export interface GitInfo {
     gitCommit?: string;
     gitAuthor?: string;
@@ -21,8 +21,17 @@ export declare class SourcemapService {
         lineno?: number;
         colno?: number;
     }): Promise<ResolvedSourceLocation | null>;
+    resolveStack(params: {
+        appId: string;
+        release?: string;
+        stack?: string;
+    }): Promise<MappedStackFrame[]>;
     private findMatchingRecord;
     private normalizeArtifactFilename;
+    private parseStackFrames;
+    private parseStackLine;
     private loadTraceMap;
+    private mapCompiledPosition;
+    private mapFrameWithRecord;
     private extractSourceContext;
 }

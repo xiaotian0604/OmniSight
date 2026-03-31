@@ -101,6 +101,10 @@ export interface EventData extends Record<string, unknown> {
   type: string;
 }
 
+type OmniSightRuntimeGlobal = typeof globalThis & {
+  __OMNISIGHT_RELEASE__?: string;
+};
+
 /**
  * 事件回调函数类型
  * 用于 on() 注册的监听器，当特定类型的事件被捕获时触发
@@ -130,6 +134,29 @@ interface PendingDuplicateError {
 
 /** 错误防抖窗口：同一 session、同一 fingerprint 在 60 秒内只即时上报一次 */
 const ERROR_DEDUP_TTL_MS = 60_000;
+
+function readRuntimeRelease(): string | undefined {
+  const runtime = globalThis as OmniSightRuntimeGlobal;
+  if (
+    typeof runtime.__OMNISIGHT_RELEASE__ === 'string' &&
+    runtime.__OMNISIGHT_RELEASE__.trim()
+  ) {
+    return runtime.__OMNISIGHT_RELEASE__.trim();
+  }
+
+  if (typeof document !== 'undefined') {
+    const release = document
+      .querySelector('meta[name="omnisight-release"]')
+      ?.getAttribute('content')
+      ?.trim();
+
+    if (release) {
+      return release;
+    }
+  }
+
+  return undefined;
+}
 
 /* ---------------------------------------------------------------
  * 错误指纹生成函数
@@ -255,13 +282,15 @@ export class Core {
    * @param {OmniSightConfig} config - 用户传入的 SDK 配置
    */
   constructor(config: OmniSightConfig) {
+    const resolvedRelease = config.release || readRuntimeRelease();
+
     /* 合并用户配置与默认值，生成最终的 ResolvedConfig */
     this.config = {
       /* 必填字段直接使用用户传入的值 */
       appId: config.appId,
       dsn: config.dsn,
       apiKey: config.apiKey,  /* API Key 用于身份验证 */
-      release: config.release,
+      release: resolvedRelease,
       /* 可选字段使用 ?? 运算符填充默认值 */
       sampleRate: config.sampleRate ?? 0.1,         /* 默认 10% 采样率 */
       enableReplay: config.enableReplay ?? false,    /* 默认不启用录制 */

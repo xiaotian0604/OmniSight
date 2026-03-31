@@ -53,7 +53,9 @@ interface RawErrorGroup {
  *
  * @property fingerprint - 错误指纹
  * @property message - 错误消息
- * @property stack - 还原后的堆栈信息（如果上传了 SourceMap，则为源码级堆栈）
+ * @property stack - 原始堆栈字符串
+ * @property rawStack - 原始堆栈字符串的显式字段，便于和结构化映射结果并存
+ * @property mappedStackFrames - Gateway 返回的结构化多帧 SourceMap 映射结果
  * @property filename - 源文件名
  * @property lineno - 源码行号
  * @property colno - 源码列号
@@ -69,6 +71,8 @@ export interface ErrorDetail {
   fingerprint: string;
   message: string;
   stack?: string;
+  rawStack?: string;
+  mappedStackFrames?: MappedStackFrame[];
   filename?: string;
   lineno?: number;
   colno?: number;
@@ -102,10 +106,26 @@ export interface SourceMapResolution {
   gitBranch?: string;
 }
 
+export interface MappedStackFrame {
+  raw: string;
+  functionName?: string;
+  compiledFile?: string;
+  compiledLine?: number;
+  compiledColumn?: number;
+  artifact?: string;
+  release?: string;
+  originalFile?: string;
+  originalLine?: number;
+  originalColumn?: number;
+  mapped: boolean;
+}
+
 interface RawErrorDetail {
   fingerprint: string;
   message: string;
   stack?: string;
+  rawStack?: string;
+  mappedStackFrames?: MappedStackFrame[];
   filename?: string;
   lineno?: number;
   colno?: number;
@@ -194,7 +214,7 @@ export async function getErrors(params: GetErrorsParams): Promise<ErrorGroup[]> 
  *
  * 调用 Gateway 的 GET /v1/errors/:fingerprint 接口
  * 返回指定错误指纹的完整详情，包括：
- * - 还原后的堆栈信息（如果上传了 SourceMap）
+ * - 原始堆栈信息 + 结构化多帧映射结果
  * - 错误发生前的用户操作面包屑
  * - 关联的录像 session_id
  * - 环境标签（浏览器、OS 等）

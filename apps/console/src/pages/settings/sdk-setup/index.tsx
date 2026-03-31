@@ -77,6 +77,35 @@ function generateCode(config: SdkConfig): string {
   return lines.join('\n');
 }
 
+function generateVitePluginCode(): string {
+  return [
+    `import { defineConfig } from 'vite';`,
+    `import react from '@vitejs/plugin-react';`,
+    `import { omniSightVitePlugin } from '@omnisight/build-tools';`,
+    '',
+    `export default defineConfig({`,
+    `  plugins: [`,
+    `    react(),`,
+    `    omniSightVitePlugin({`,
+    `      appId: 'your-app-id',`,
+    `      dsn: 'https://your-gateway.com',`,
+    `      apiKey: 'your-api-key',`,
+    `    }),`,
+    `  ],`,
+    `});`,
+  ].join('\n');
+}
+
+function generateCliFallbackCode(): string {
+  return [
+    `npx omnisight-upload-sourcemaps \\`,
+    `  --app-id your-app-id \\`,
+    `  --dsn https://your-gateway.com \\`,
+    `  --api-key your-api-key \\`,
+    `  --dir dist`,
+  ].join('\n');
+}
+
 /**
  * SDK 接入指引页面组件
  *
@@ -106,6 +135,8 @@ export default function SdkSetupPage() {
    * useMemo 缓存结果，仅在 config 变化时重新生成
    */
   const generatedCode = useMemo(() => generateCode(config), [config]);
+  const vitePluginCode = useMemo(() => generateVitePluginCode(), []);
+  const cliFallbackCode = useMemo(() => generateCliFallbackCode(), []);
 
   /**
    * 复制代码到剪贴板
@@ -127,38 +158,58 @@ export default function SdkSetupPage() {
           <span className="card-title">步骤一：安装 SDK</span>
         </div>
         <p style={{ fontSize: '13px', color: '#8b949e', marginBottom: '12px' }}>
-          在你的项目中安装 @omnisight/sdk 包
+          推荐同时安装 SDK 和构建接入工具。前者负责运行时采集，后者负责注入 release 并自动上传 SourceMap。
         </p>
 
         {/* npm 安装命令 */}
         <div className="code-block" style={{ marginBottom: '8px' }}>
           <button
             className="code-block-copy"
-            onClick={() => handleCopy('npm install @omnisight/sdk')}
+            onClick={() => handleCopy('npm install @omnisight/sdk && npm install -D @omnisight/build-tools')}
             type="button"
           >
             复制
           </button>
-          <code>npm install @omnisight/sdk</code>
+          <code>npm install @omnisight/sdk && npm install -D @omnisight/build-tools</code>
         </div>
 
         {/* 或使用 pnpm */}
         <div className="code-block">
           <button
             className="code-block-copy"
-            onClick={() => handleCopy('pnpm add @omnisight/sdk')}
+            onClick={() => handleCopy('pnpm add @omnisight/sdk && pnpm add -D @omnisight/build-tools')}
             type="button"
           >
             复制
           </button>
-          <code>pnpm add @omnisight/sdk</code>
+          <code>pnpm add @omnisight/sdk && pnpm add -D @omnisight/build-tools</code>
+        </div>
+      </div>
+
+      <div className="card mb-6">
+        <div className="card-header">
+          <span className="card-title">步骤二：配置 Vite 插件（推荐）</span>
+        </div>
+        <p style={{ fontSize: '13px', color: '#8b949e', marginBottom: '12px' }}>
+          插件会自动生成 release、注入到 HTML，并在构建完成后上传 JavaScript SourceMap。
+        </p>
+
+        <div className="code-block">
+          <button
+            className="code-block-copy"
+            onClick={() => handleCopy(vitePluginCode)}
+            type="button"
+          >
+            复制
+          </button>
+          <pre style={{ margin: 0 }}>{vitePluginCode}</pre>
         </div>
       </div>
 
       {/* ==================== 步骤二：配置选项 ==================== */}
       <div className="card mb-6">
         <div className="card-header">
-          <span className="card-title">步骤二：选择配置</span>
+          <span className="card-title">步骤三：选择 SDK 配置</span>
         </div>
         <p style={{ fontSize: '13px', color: '#8b949e', marginBottom: '16px' }}>
           根据你的需求选择 SDK 功能，下方代码会实时更新
@@ -224,10 +275,10 @@ export default function SdkSetupPage() {
       {/* ==================== 步骤三：初始化代码 ==================== */}
       <div className="card mb-6">
         <div className="card-header">
-          <span className="card-title">步骤三：添加初始化代码</span>
+          <span className="card-title">步骤四：添加初始化代码</span>
         </div>
         <p style={{ fontSize: '13px', color: '#8b949e', marginBottom: '12px' }}>
-          将以下代码添加到应用入口文件（如 main.ts / index.ts）的最顶部
+          将以下代码添加到应用入口文件（如 main.ts / index.ts）的最顶部。若已使用上面的构建插件，通常不需要再手写 release。
         </p>
 
         {/* 动态生成的初始化代码 */}
@@ -243,10 +294,30 @@ export default function SdkSetupPage() {
         </div>
       </div>
 
+      <div className="card mb-6">
+        <div className="card-header">
+          <span className="card-title">步骤五：CLI 兜底上传（非 Vite 场景）</span>
+        </div>
+        <p style={{ fontSize: '13px', color: '#8b949e', marginBottom: '12px' }}>
+          如果不是 Vite 项目，或 CI 需要显式控制上传时机，可以在构建后调用 CLI。
+        </p>
+
+        <div className="code-block">
+          <button
+            className="code-block-copy"
+            onClick={() => handleCopy(cliFallbackCode)}
+            type="button"
+          >
+            复制
+          </button>
+          <pre style={{ margin: 0 }}>{cliFallbackCode}</pre>
+        </div>
+      </div>
+
       {/* ==================== 步骤四：验证接入 ==================== */}
       <div className="card">
         <div className="card-header">
-          <span className="card-title">步骤四：验证接入</span>
+          <span className="card-title">步骤六：验证接入</span>
         </div>
         <div style={{ fontSize: '13px', color: '#8b949e' }}>
           <p style={{ marginBottom: '8px' }}>完成上述步骤后，你可以通过以下方式验证 SDK 是否正常工作：</p>
@@ -260,6 +331,8 @@ export default function SdkSetupPage() {
               ）
             </li>
             <li>观察是否有请求发送到 /v1/ingest/batch</li>
+            <li>构建完成后确认 dist HTML 中存在 `omnisight-release` meta 标签</li>
+            <li>确认构建日志中出现 Sourcemap 上传成功记录</li>
             <li>回到 OmniSight 控制台的错误列表页，确认错误已被捕获</li>
           </ol>
         </div>

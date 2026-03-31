@@ -12,6 +12,7 @@ export declare class AlertService {
     private readonly logger;
     private readonly ruleConfig;
     private readonly alertEnabled;
+    private readonly consoleBaseUrl?;
     constructor(pg: Pool, redis: Redis, configService: ConfigService, sourcemapService: SourcemapService);
     scanAndAlert(channels: AlertChannel[]): Promise<{
         scanResult: HighFrequencyErrorScanResult | null;
@@ -24,6 +25,10 @@ export declare class AlertService {
     private recordAlertSent;
     private releaseCooldown;
     private buildAlertPayload;
+    private normalizeBaseUrl;
+    private buildConsoleDetailUrl;
+    private buildConsoleReplayUrl;
+    private getReplaySessionId;
     private sendToChannels;
     triggerAlert(payload: AlertPayload, channels: AlertChannel[]): Promise<AlertResult[]>;
     private parseOptionalNumber;

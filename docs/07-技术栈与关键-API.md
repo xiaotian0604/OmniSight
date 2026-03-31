@@ -163,6 +163,13 @@
 
 虽然路径参数叫 `id`，但当前主语义是 `fingerprint`，只是在兼容 UUID 查询。
 
+当前返回结果除了主错误的 `sourceMap` 摘要，还会额外返回：
+
+- `rawStack`
+- `mappedStackFrames`
+
+这样 Console 可以同时展示“主错误摘要 + 多帧映射栈 + 原始 stack”。
+
 ### `POST /v1/sourcemap`
 
 为什么要单独做这个接口：

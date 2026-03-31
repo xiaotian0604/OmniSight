@@ -41,6 +41,7 @@ import { PG_POOL } from '../database.module';
 import * as fs from 'fs';
 import { TraceMap, originalPositionFor, sourceContentFor } from '@jridgewell/trace-mapping';
 import {
+  MappedStackFrame,
   ResolvedSourceLocation,
   SourceContextLine,
 } from './sourcemap.types';
@@ -70,6 +71,14 @@ interface SourcemapRecord {
 interface CachedTraceMap {
   mtimeMs: number;
   traceMap: TraceMap;
+}
+
+interface ParsedStackFrame {
+  raw: string;
+  functionName?: string;
+  compiledFile?: string;
+  compiledLine?: number;
+  compiledColumn?: number;
 }
 
 const SOURCE_CONTEXT_RADIUS = 3;
@@ -256,30 +265,28 @@ export class SourcemapService {
     }
 
     try {
-      const traceMap = this.loadTraceMap(record.map_path);
-      const original = originalPositionFor(traceMap, {
-        line: params.lineno,
-        // 浏览器上报的 colno 通常按 1 开始，source map 查询列号按 0 开始。
-        column:
-          typeof params.colno === 'number' && Number.isFinite(params.colno)
-            ? Math.max(params.colno - 1, 0)
-            : 0,
-      });
+      const original = this.mapCompiledPosition(
+        record,
+        params.lineno,
+        params.colno,
+      );
 
-      if (!original.source || !original.line) {
+      if (!original) {
         return resolved;
       }
 
-      resolved.originalFile = original.source;
-      resolved.originalLine = original.line;
-      resolved.originalColumn =
-        typeof original.column === 'number' ? original.column + 1 : undefined;
+      resolved.originalFile = original.originalFile;
+      resolved.originalLine = original.originalLine;
+      resolved.originalColumn = original.originalColumn;
 
-      const sourceContent = sourceContentFor(traceMap, original.source);
+      const sourceContent = sourceContentFor(
+        this.loadTraceMap(record.map_path),
+        original.originalFile,
+      );
       if (sourceContent) {
         resolved.sourceContext = this.extractSourceContext(
           sourceContent,
-          original.line,
+          original.originalLine,
         );
       }
     } catch (error) {
@@ -289,6 +296,81 @@ export class SourcemapService {
     }
 
     return resolved;
+  }
+
+  /**
+   * 将整条 stack 解析为结构化帧，并对每一帧尝试做 SourceMap 还原。
+   *
+   * 设计目标：
+   * - 不覆盖原始 stack，前端可以同时看到 raw stack 和映射结果
+   * - 仅对可解析的浏览器常见帧做映射，其他帧原样保留
+   * - 同一个 artifact 在一次调用中只查一次 sourcemap 记录
+   */
+  async resolveStack(params: {
+    appId: string;
+    release?: string;
+    stack?: string;
+  }): Promise<MappedStackFrame[]> {
+    if (!params.stack) {
+      return [];
+    }
+
+    const parsedFrames = this.parseStackFrames(params.stack);
+    if (parsedFrames.length === 0) {
+      return [];
+    }
+
+    const recordCache = new Map<string, Promise<SourcemapRecord | null>>();
+    const results: MappedStackFrame[] = [];
+
+    for (const frame of parsedFrames) {
+      const artifact = this.normalizeArtifactFilename(frame.compiledFile);
+      if (
+        !artifact ||
+        typeof frame.compiledLine !== 'number' ||
+        !Number.isFinite(frame.compiledLine) ||
+        frame.compiledLine <= 0
+      ) {
+        results.push({
+          raw: frame.raw,
+          functionName: frame.functionName,
+          compiledFile: frame.compiledFile,
+          compiledLine: frame.compiledLine,
+          compiledColumn: frame.compiledColumn,
+          mapped: false,
+        });
+        continue;
+      }
+
+      const cacheKey = `${params.appId}:${params.release || ''}:${artifact}`;
+      let recordPromise = recordCache.get(cacheKey);
+      if (!recordPromise) {
+        recordPromise = this.findMatchingRecord(
+          params.appId,
+          artifact,
+          params.release,
+        );
+        recordCache.set(cacheKey, recordPromise);
+      }
+
+      const record = await recordPromise;
+      if (!record) {
+        results.push({
+          raw: frame.raw,
+          functionName: frame.functionName,
+          compiledFile: frame.compiledFile,
+          compiledLine: frame.compiledLine,
+          compiledColumn: frame.compiledColumn,
+          artifact,
+          mapped: false,
+        });
+        continue;
+      }
+
+      results.push(this.mapFrameWithRecord(record, frame, artifact));
+    }
+
+    return results;
   }
 
   private async findMatchingRecord(
@@ -346,6 +428,45 @@ export class SourcemapService {
     return segments[segments.length - 1] || cleanPath || null;
   }
 
+  private parseStackFrames(stack: string): ParsedStackFrame[] {
+    return stack
+      .split(/\r?\n/)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => this.parseStackLine(line));
+  }
+
+  private parseStackLine(line: string): ParsedStackFrame {
+    const trimmed = line.trim();
+
+    const chromeMatch = trimmed.match(
+      /^at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?$/,
+    );
+    if (chromeMatch) {
+      return {
+        raw: line,
+        functionName: chromeMatch[1] || undefined,
+        compiledFile: chromeMatch[2],
+        compiledLine: parseInt(chromeMatch[3], 10),
+        compiledColumn: parseInt(chromeMatch[4], 10),
+      };
+    }
+
+    const firefoxMatch = trimmed.match(/^(.+?)@(.+?):(\d+):(\d+)$/);
+    if (firefoxMatch) {
+      return {
+        raw: line,
+        functionName: firefoxMatch[1] || undefined,
+        compiledFile: firefoxMatch[2],
+        compiledLine: parseInt(firefoxMatch[3], 10),
+        compiledColumn: parseInt(firefoxMatch[4], 10),
+      };
+    }
+
+    return {
+      raw: line,
+    };
+  }
+
   private loadTraceMap(mapPath: string): TraceMap {
     const stat = fs.statSync(mapPath);
     const cached = this.traceMapCache.get(mapPath);
@@ -369,6 +490,62 @@ export class SourcemapService {
     }
 
     return traceMap;
+  }
+
+  private mapCompiledPosition(
+    record: SourcemapRecord,
+    line: number,
+    column?: number,
+  ): {
+    originalFile: string;
+    originalLine: number;
+    originalColumn?: number;
+  } | null {
+    const traceMap = this.loadTraceMap(record.map_path);
+    const original = originalPositionFor(traceMap, {
+      line,
+      column:
+        typeof column === 'number' && Number.isFinite(column)
+          ? Math.max(column - 1, 0)
+          : 0,
+    });
+
+    if (!original.source || !original.line) {
+      return null;
+    }
+
+    return {
+      originalFile: original.source,
+      originalLine: original.line,
+      originalColumn:
+        typeof original.column === 'number' ? original.column + 1 : undefined,
+    };
+  }
+
+  private mapFrameWithRecord(
+    record: SourcemapRecord,
+    frame: ParsedStackFrame,
+    artifact: string,
+  ): MappedStackFrame {
+    const mapped = this.mapCompiledPosition(
+      record,
+      frame.compiledLine!,
+      frame.compiledColumn,
+    );
+
+    return {
+      raw: frame.raw,
+      functionName: frame.functionName,
+      compiledFile: frame.compiledFile,
+      compiledLine: frame.compiledLine,
+      compiledColumn: frame.compiledColumn,
+      artifact,
+      release: record.version,
+      originalFile: mapped?.originalFile,
+      originalLine: mapped?.originalLine,
+      originalColumn: mapped?.originalColumn,
+      mapped: !!mapped,
+    };
   }
 
   private extractSourceContext(

@@ -214,7 +214,11 @@ export default function ErrorDetailPage() {
           </div>
         )}
 
-        <StackTrace stack={detail.stack} />
+        <StackTrace
+          stack={detail.stack}
+          rawStack={detail.rawStack}
+          mappedFrames={detail.mappedStackFrames}
+        />
       </div>
 
       {/* ==================== 用户操作面包屑 ==================== */}
